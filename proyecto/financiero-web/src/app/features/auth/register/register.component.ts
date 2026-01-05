@@ -1,0 +1,55 @@
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Router, RouterModule } from '@angular/router';
+
+// Imports UI
+import { InputTextModule } from 'primeng/inputtext';
+import { PasswordModule } from 'primeng/password';
+import { ButtonModule } from 'primeng/button';
+import { MessageService } from 'primeng/api';
+
+@Component({
+  selector: 'app-register',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule, RouterModule, InputTextModule, PasswordModule, ButtonModule],
+  templateUrl: './register.component.html',
+  styleUrl: './register.component.scss'
+})
+export class RegisterComponent {
+  registerForm: FormGroup;
+
+  constructor(private fb: FormBuilder, private router: Router,private messageService: MessageService) {
+    this.registerForm = this.fb.group({
+      nombre: ['', Validators.required],
+      curp: ['', [Validators.required, Validators.minLength(18), Validators.maxLength(18)]],
+      password: ['', [Validators.required, Validators.minLength(6)]],
+      confirmPassword: ['', Validators.required]
+    });
+  }
+
+  onSubmit() {
+    if (this.registerForm.valid) {
+      // 2. Usar el Toast en lugar de alert()
+      this.messageService.add({
+        severity: 'success',
+        summary: '¡Bienvenido!',
+        detail: 'Cuenta creada correctamente. Por favor inicia sesión.',
+        life: 3000
+      });
+      
+      // Esperamos un poquito antes de redirigir para que vea el mensaje
+      setTimeout(() => {
+          this.router.navigate(['/login']);
+      }, 1000);
+    } else {
+        // Mensaje de advertencia si el formulario está mal
+        this.messageService.add({
+            severity: 'warn',
+            summary: 'Atención',
+            detail: 'Por favor completa todos los campos correctamente.',
+            life: 3000
+        });
+    }
+  }
+}

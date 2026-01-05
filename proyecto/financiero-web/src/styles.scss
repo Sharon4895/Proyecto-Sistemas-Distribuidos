@@ -1,0 +1,19 @@
+/* 1. Tailwind Directives (Primero esto) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 2. PrimeNG Theme y Core (Después esto) */
+@import "primeng/resources/themes/lara-light-blue/theme.css";
+@import "primeng/resources/primeng.css";
+@import "primeicons/primeicons.css";
+
+/* 3. Ajustes globales */
+body {
+    background-color: #f3f4f6; /* Coincide con bg-gray-100 de Tailwind */
+}
+
+/* Ajuste para que el input de password de PrimeNG ocupe todo el ancho */
+.p-password {
+    width: 100%;
+}

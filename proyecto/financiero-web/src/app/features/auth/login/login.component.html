@@ -1,0 +1,57 @@
+<div class="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+    
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-8">
+        
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                <i class="pi pi-wallet text-3xl text-blue-600"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900">Bienvenido</h2>
+            <p class="text-gray-500 mt-2">Sistema Financiero Digital</p>
+        </div>
+
+        <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="space-y-6">
+            
+            <div class="flex flex-col gap-2">
+                <label for="curp" class="text-sm font-medium text-gray-700">CURP</label>
+                <input 
+                    pInputText 
+                    id="curp" 
+                    formControlName="curp" 
+                    placeholder="Ingresa tu CURP" 
+                    class="w-full p-3 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-blue-500" 
+                />
+                <small *ngIf="loginForm.get('curp')?.dirty && loginForm.get('curp')?.errors" class="text-red-500 text-xs">
+                    El CURP es requerido (mínimo 18 caracteres).
+                </small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="password" class="text-sm font-medium text-gray-700">Contraseña</label>
+                <p-password 
+                    id="password" 
+                    formControlName="password" 
+                    [feedback]="false" 
+                    [toggleMask]="true"
+                    styleClass="w-full"
+                    inputStyleClass="w-full p-3 border border-gray-300 rounded-lg"
+                    placeholder="••••••••"
+                ></p-password>
+            </div>
+
+            <p-button 
+                label="Iniciar Sesión" 
+                type="submit" 
+                [loading]="loading"
+                [disabled]="loginForm.invalid"
+                styleClass="w-full bg-blue-600 hover:bg-blue-700 border-none text-white py-3 rounded-lg font-semibold"
+            ></p-button>
+
+            <div  class="text-center mt-4">
+                <a routerLink="/register" class="text-sm text-blue-600 hover:text-blue-800 font-medium no-underline">
+                    ¿No tienes cuenta? Regístrate aquí
+                </a>
+            </div>
+        </form>
+    </div>
+</div>

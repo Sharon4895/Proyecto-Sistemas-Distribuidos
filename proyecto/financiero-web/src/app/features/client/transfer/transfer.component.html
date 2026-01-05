@@ -1,0 +1,83 @@
+<p-toast position="top-right"></p-toast>
+
+<div class="max-w-2xl mx-auto fade-in">
+
+    <button routerLink="/client/dashboard" class="mb-4 text-gray-500 hover:text-blue-600 flex items-center gap-2 font-medium transition-colors border-none bg-transparent cursor-pointer">
+        <i class="pi pi-arrow-left"></i> Volver al inicio
+    </button>
+
+    <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+
+        <div class="bg-blue-600 p-6 text-white">
+            <h2 class="text-2xl font-bold m-0">Nueva Transferencia</h2>
+            <p class="text-blue-100 opacity-90 m-0 mt-2">Envía dinero a otros usuarios al instante</p>
+        </div>
+
+        <div class="p-6 md:p-8">
+
+            <form [formGroup]="transferForm" (ngSubmit)="onTransfer()" class="flex flex-col gap-5">
+
+                <div class="flex flex-col gap-2">
+                    <label for="targetCurp" class="font-semibold text-gray-700">Cuenta Destino (CURP)</label>
+                    
+                    <div class="p-inputgroup">
+                        <span class="p-inputgroup-addon bg-gray-50"><i class="pi pi-user"></i></span>
+                        <input 
+                            pInputText 
+                            id="targetCurp" 
+                            formControlName="targetCurp" 
+                            placeholder="Ingresa el CURP del destinatario" 
+                            class="w-full p-3" 
+                            [maxlength]="18"
+                        />
+                    </div>
+                    <small class="text-red-500" *ngIf="transferForm.get('targetCurp')?.invalid && transferForm.get('targetCurp')?.touched">
+                        El CURP es requerido (mínimo 18 caracteres).
+                    </small>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="description" class="font-semibold text-gray-700">Concepto / Motivo</label>
+                    <div class="p-inputgroup">
+                        <span class="p-inputgroup-addon bg-gray-50"><i class="pi pi-tag"></i></span>
+                        <input 
+                            pInputText 
+                            id="description" 
+                            formControlName="description" 
+                            placeholder="Ej. Pago de cena, Renta..." 
+                            class="w-full p-3" 
+                            maxlength="50"
+                        />
+                    </div>
+                    <small class="text-gray-500">Opcional. Máximo 50 caracteres.</small>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <label for="amount" class="font-semibold text-gray-700">Monto a enviar</label>
+                    
+                    <p-inputNumber 
+                        id="amount" 
+                        formControlName="amount" 
+                        mode="currency" 
+                        currency="MXN" 
+                        locale="es-MX" 
+                        placeholder="$0.00"
+                        styleClass="w-full"
+                        class="w-full p-inputtext-lg font-bold">
+                    </p-inputNumber>
+
+                    <small class="text-red-500" *ngIf="transferForm.get('amount')?.invalid && transferForm.get('amount')?.touched">
+                        Debes ingresar un monto mayor a $0.
+                    </small>
+                </div>
+                
+                <p-button 
+                    label="Confirmar Transferencia" 
+                    icon="pi pi-check" 
+                    type="submit" 
+                    [loading]="loading"
+                    styleClass="w-full mt-4 p-3 text-lg font-bold bg-blue-600 border-none w-full">
+                </p-button>
+
+            </form>
+        </div>
+    </div>
+</div>
