@@ -107,7 +107,9 @@ java -cp "bin:lib/*" src/WebServer 8080
 
 ---
 
-# Checklist de requisitos (resumido)
+## Checklist de requisitos cumplidos
+
+**Backend:**
 - [x] Microservicios REST en Java
 - [x] AuthService (JWT)
 - [x] AccountService (saldo, depósito, retiro, transferencia)
@@ -117,54 +119,65 @@ java -cp "bin:lib/*" src/WebServer 8080
 - [x] PubSubSimulator (simulación local, hooks AWS)
 - [x] Configuración para desarrollo y producción
 - [x] Frontend Angular (usuario y admin)
-- [ ] Simulador de clientes Java (opcional, para demo)
-- [ ] Monitoreo Lanterna (opcional, para demo)
+- [x] Simulador de clientes Java (opcional, para demo)
+- [x] Monitor Lanterna (opcional, para demo)
 
-# Despliegue recomendado para estudiantes
-
-## Opción 1: Local (más fácil y suficiente para la demo)
-1. **Base de datos:**
-   - Instala MySQL localmente y ejecuta el script `db/schema.sql`.
-2. **Backend:**
-   - Compila todo el código Java:
-     ```bash
-     javac -d bin -cp "lib/*" src/**/*.java
-     ```
-   - Ejecuta el servidor:
-     ```bash
-     java -cp "bin:lib/*" WebServer 8080
-     ```
-3. **Frontend:**
-   - En otra terminal:
-     ```bash
-     cd ../financiero-web
-     npm install
-     npm start
-     ```
-   - Accede a `http://localhost:4200`.
-
-## Opción 2: Nube gratuita (solo si quieres mostrarlo online)
-- Puedes usar una máquina virtual gratuita en Google Cloud, AWS o Azure (free tier) para levantar el backend y la base de datos.
-- Sube el frontend a un bucket S3, Firebase Hosting, o Netlify (tienen planes gratuitos).
-- Cambia la URL del backend en `environment.prod.ts`.
-- **No es obligatorio para la calificación, pero suma puntos en la demo.**
-
-# Recomendaciones
-- Haz pruebas locales completas antes de la demo.
-- Si tienes poco tiempo, prioriza la opción local.
-- Documenta bien los pasos en el README y ten a la mano los comandos.
-- Si el profe pide el simulador de clientes o Lanterna, implementa un programa Java aparte que consuma los endpoints REST.
-
-# Entrega
-- Sube todo el código a un repositorio privado de GitHub o Google Drive.
-- Incluye capturas de pantalla y el README actualizado.
-- Ten listo el enlace de la web de usuario y admin para la demo.
+**Frontend:**
+- [x] Login y registro conectados al backend
+- [x] Dashboard de usuario y admin
+- [x] Transferencias entre usuarios (por CURP)
+- [x] Historial de transacciones
+- [x] Rutas protegidas por rol (guards)
+- [x] Integración con JWT y backend
+- [x] Configuración de URL del backend por entorno
+- [x] Experiencia de usuario robusta y responsiva
 
 ---
 
-# Estructura de carpetas
-- `src/` Código fuente Java
-- `lib/` Dependencias externas
-- `db/` Scripts de base de datos
-- `bin/` Archivos compilados
+## Instrucciones de despliegue local
+
+**Backend:**
+1. Instala Java JDK 11+ y MySQL.
+2. Coloca los JAR necesarios en `lib/`.
+3. Crea la base de datos con `db/schema.sql`.
+4. Compila y ejecuta:
+   ```bash
+   javac -d bin -cp "lib/*" src/WebServer.java
+   java -cp "bin:lib/*" WebServer 8080
+   ```
+
+**Frontend:**
+1. Instala Node.js y Angular CLI.
+2. Instala dependencias y ejecuta:
+   ```bash
+   cd proyecto/financiero-web
+   npm install
+   npm start
+   ```
+3. Accede a `http://localhost:4200`.
+
+---
+
+## Instrucciones de despliegue en la nube
+
+**Backend:**
+- Configura `src/config.properties` con los datos de tu VM/AWS.
+- Usa una base de datos gestionada (RDS) y servicios de colas (SNS/SQS) si es necesario.
+- Asegúrate de que el backend sea accesible desde la URL pública.
+
+**Frontend:**
+- Edita `src/environments/environment.prod.ts` y coloca la URL real del backend.
+- Compila para producción:
+  ```bash
+  npm run build -- --configuration production
+  ```
+- Sube el contenido de `dist/financiero-web` a tu servidor web o bucket S3.
+
+---
+
+## Recomendaciones para estudiantes sin presupuesto
+
+- Puedes simular Pub/Sub localmente sin AWS.
+- Usa MySQL local y despliega el backend en una VM gratuita (Google Cloud, AWS Free Tier, etc.).
+- Cambia la URL del backend en el archivo de entorno del frontend para apuntar a tu VM.
 

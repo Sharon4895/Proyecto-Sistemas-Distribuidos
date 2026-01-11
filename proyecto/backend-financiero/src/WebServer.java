@@ -1,227 +1,295 @@
-import admin.AdminService;
-import transaction.TransactionService;
-import account.AccountService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import com.google.gson.Gson; 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.JWTVerifier;
+import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+
+import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.sql.*;
-import java.util.concurrent.Executors;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import auth.AuthService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WebServer {
-    private final AdminService adminService = new AdminService();
-    private final TransactionService transactionService = new TransactionService();
-    private final AccountService accountService = new AccountService();
-    // Método auxiliar para validar JWT y obtener claims
-    private DecodedJWT validateToken(HttpExchange exchange) throws IOException {
-        String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            sendResponse("{\"error\": \"Token faltante\"}", exchange, 401);
-            return null;
-        }
-        String token = authHeader.substring(7);
-        try {
-            JWTVerifier verifier = JWT.require(Algorithm.HMAC256(JWT_SECRET)).build();
-            return verifier.verify(token);
-        } catch (Exception e) {
-            sendResponse("{\"error\": \"Token inválido\"}", exchange, 401);
-            return null;
-        }
-    }
+
+    // Configuración
+    private static final int DEFAULT_PORT = 8080;
     private static final String JWT_SECRET = "super_secret_key_2026";
-
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true";
-    private static final String DB_USER = "root";
-    private static final String DB_PASS = "root";
-
-    // --- ENDPOINTS ---
-    private static final String LOGIN_ENDPOINT = "/api/auth/login"; 
-    private static final String BALANCE_ENDPOINT = "/api/account/balance";
-    private static final String TRANSACTIONS_ENDPOINT = "/api/transactions";
-    private static final String OPERATE_ENDPOINT = "/api/account/operate";
-    private static final String TRANSFER_ENDPOINT = "/api/account/transfer";
-
     private final int port;
-    private HttpServer server;
-    private final Gson gson = new Gson(); 
-    private final AuthService authService = new AuthService();
+    
+    // URLs de Microservicios
+    private final List<String> accountUrls = new ArrayList<>();
+    private final List<String> transactionUrls = new ArrayList<>();
+    private String authUrl;
+    private String adminUrl;
+    private String auditUrl;
+
+    // Índices atómicos para Round-Robin (Thread-safe)
+    private final AtomicInteger accountIdx = new AtomicInteger(0);
+    private final AtomicInteger transactionIdx = new AtomicInteger(0);
 
     public static void main(String[] args) {
-        int serverPort = 8080;
-        if (args.length == 1) {
-            serverPort = Integer.parseInt(args[0]);
-        }
-        WebServer webServer = new WebServer(serverPort);
-        webServer.startServer();
-        System.out.println(">>> Servidor Financiero COMPLETISIMO v3 escuchando en el puerto " + serverPort);
+        int port = args.length == 1 ? Integer.parseInt(args[0]) : DEFAULT_PORT;
+        new WebServer(port).startServer();
     }
 
     public WebServer(int port) {
         this.port = port;
+        loadConfiguration();
+    }
+
+    private void loadConfiguration() {
+        Properties props = new Properties();
+        try (FileInputStream fis = new FileInputStream("src/config.properties")) {
+            props.load(fis);
+        } catch (IOException e) {
+            System.err.println("Advertencia: No se pudo leer config.properties, usando valores por defecto.");
+        }
+
+        this.authUrl = props.getProperty("auth.url", "http://localhost:8081");
+        
+        this.auditUrl = props.getProperty("audit.url", "http://localhost:8084");    
+        this.adminUrl = props.getProperty("admin.url", "http://localhost:8085");
+        
+        loadListFromProp(props, "account.urls", "http://localhost:8082", accountUrls);
+        loadListFromProp(props, "transaction.urls", "http://localhost:8083", transactionUrls);
+    }
+
+    private void loadListFromProp(Properties props, String key, String defaultVal, List<String> list) {
+        list.clear();
+        String val = props.getProperty(key, defaultVal);
+        Arrays.stream(val.split(",")).map(String::trim).filter(s -> !s.isEmpty()).forEach(list::add);
     }
 
     public void startServer() {
         try {
-            this.server = HttpServer.create(new InetSocketAddress(port), 0);
+            HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+            // Rutas Públicas (Auth)
+            server.createContext("/api/auth/register", ex -> proxyRequest(ex, authUrl + "/register", "POST"));
+            server.createContext("/api/auth/login", ex -> proxyRequest(ex, authUrl + "/login", "POST"));
+
+            // Rutas Protegidas (Account & Transactions)
+            server.createContext("/api/account/balance", this::handleBalanceRequest);
+            server.createContext("/api/account/operate", ex -> handleAuthenticatedProxy(ex, accountUrls, "/operate", "POST"));
+            server.createContext("/api/account/transfer", ex -> {
+                System.out.println("[LOG] Llega petición a /api/account/transfer: método=" + ex.getRequestMethod());
+                handleAuthenticatedProxy(ex, accountUrls, "/transfer", "POST");
+            });
+            server.createContext("/api/transactions", this::handleTransactionsRequest);
+
+            // Rutas Admin & Audit
+            server.createContext("/api/admin/users", ex -> handleSimpleProxy(ex, adminUrl + "/users"));
+            server.createContext("/api/admin/stats", ex -> handleSimpleProxy(ex, adminUrl + "/stats"));
+            server.createContext("/api/admin/charts", ex -> handleSimpleProxy(ex, adminUrl + "/charts"));
+            server.createContext("/api/admin/user-logs", ex -> handleSimpleProxy(ex, adminUrl + "/userlogs"));
+            server.createContext("/api/admin", ex -> handleSimpleProxy(ex, adminUrl + ex.getRequestURI().getPath()));
+            server.createContext("/api/audit/logs", ex -> handleSimpleProxy(ex, auditUrl + "/logs"));
+
+            server.setExecutor(Executors.newFixedThreadPool(4));
+            server.start();
+            System.out.println(">>> API Gateway v5 escuchando en el puerto " + port);
         } catch (IOException e) {
             e.printStackTrace();
-            return;
-        }
-
-        // Registrar TODAS las rutas
-        server.createContext(LOGIN_ENDPOINT, this::handleLoginRequest);
-        server.createContext(BALANCE_ENDPOINT, this::handleBalanceRequest);
-        server.createContext(TRANSACTIONS_ENDPOINT, this::handleTransactionsRequest);
-        server.createContext(OPERATE_ENDPOINT, this::handleOperationRequest);
-        server.createContext(TRANSFER_ENDPOINT, this::handleTransferRequest);
-        // Endpoint temporal para depuración
-        server.createContext("/api/debug/users", this::handleDebugUsersRequest);
-        
-        // Rutas de Admin y Registro
-        server.createContext("/api/admin/stats", this::handleAdminStatsRequest);
-        server.createContext("/api/admin/users", this::handleAdminUsersRequest);
-        server.createContext("/api/admin/charts", this::handleAdminChartsRequest);
-        server.createContext("/api/admin/user-logs", this::handleAdminUserLogsRequest);
-        server.createContext("/api/auth/register", this::handleRegisterRequest);
-
-        server.setExecutor(Executors.newFixedThreadPool(4));
-        server.start();
-    }
-    // Endpoint temporal para depuración: lista los últimos 5 usuarios
-    private void handleDebugUsersRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-            PreparedStatement ps = conn.prepareStatement("SELECT id, name, curp FROM users ORDER BY id DESC LIMIT 5");
-            ResultSet rs = ps.executeQuery();
-            StringBuilder json = new StringBuilder("[");
-            boolean first = true;
-            while (rs.next()) {
-                if (!first) json.append(",");
-                json.append(String.format("{\"id\":%d,\"name\":\"%s\",\"curp\":\"%s\"}", rs.getLong("id"), rs.getString("name"), rs.getString("curp")));
-                first = false;
-            }
-            json.append("]");
-            sendResponse(json.toString(), exchange, 200);
-        } catch (Exception e) {
-            e.printStackTrace();
-            sendResponse("[]", exchange, 500);
         }
     }
 
-    // ================= HANDLERS (MÉTODOS) =================
+    // ================= HANDLERS ESPECÍFICOS =================
 
-    // 1. REGISTRO (Delegado a AuthService)
-    private void handleRegisterRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-        InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
-        RegisterRequest req = gson.fromJson(isr, RegisterRequest.class);
-        String result = authService.register(req.curp, req.password, req.name);
-        int status = result.contains("success") ? 201 : (result.contains("ya está registrado") ? 409 : 400);
-        sendResponse(result, exchange, status);
-    }
-
-    // 2. LOGIN (Delegado a AuthService)
-    private void handleLoginRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-        InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
-        LoginRequest req = gson.fromJson(isr, LoginRequest.class);
-        String result = authService.login(req.curp, req.password);
-        int status = result.contains("success\": true") ? 200 : 401;
-        sendResponse(result, exchange, status);
-    }
-
-    // 3. BALANCE (Delegado a AccountService)
+    // Handler para Balance: Requiere inyectar CURP en Query Params
     private void handleBalanceRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
-        DecodedJWT jwt = authService.validateJWT(exchange);
-        if (jwt == null) { sendResponse("{\"error\": \"Token inválido\"}", exchange, 401); return; }
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
         String curp = jwt.getClaim("curp").asString();
-        String result = accountService.getBalance(curp);
-        int status = result.contains("error") ? 500 : 200;
-        sendResponse(result, exchange, status);
+        String targetUrl = getNextUrl(accountUrls, accountIdx) + "/balance?curp=" + curp;
+        proxyRequest(exchange, targetUrl, "GET");
     }
 
-    // 4. OPERACIONES (Delegado a AccountService)
-    private void handleOperationRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-        DecodedJWT jwt = authService.validateJWT(exchange);
-        if (jwt == null) { sendResponse("{\"error\": \"Token inválido\"}", exchange, 401); return; }
-        String curp = jwt.getClaim("curp").asString();
-        InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
-        OperationRequest req = gson.fromJson(isr, OperationRequest.class);
-        String result = accountService.operate(curp, req.type, req.amount);
-        int status = result.contains("success") ? 200 : 400;
-        sendResponse(result, exchange, status);
-    }
-
-    // 5. TRANSFERENCIAS (Delegado a AccountService)
-    private void handleTransferRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-        DecodedJWT jwt = authService.validateJWT(exchange);
-        if (jwt == null) { sendResponse("{\"error\": \"Token inválido\"}", exchange, 401); return; }
-        String sourceCurp = jwt.getClaim("curp").asString();
-        InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
-        TransferRequest req = gson.fromJson(isr, TransferRequest.class);
-        String result = accountService.transfer(sourceCurp, req.targetCurp, req.amount, req.description);
-        int status = result.contains("success") ? 200 : 400;
-        sendResponse(result, exchange, status);
-    }
-
-    // 6. HISTORIAL (TRANSACTIONS)
-    // Delegar a TransactionService
+    // Handler para Transacciones: Requiere inyectar CURP en Query Params
     private void handleTransactionsRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
-        DecodedJWT jwt = authService.validateJWT(exchange);
-        if (jwt == null) { sendResponse("[]", exchange, 401); return; }
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
         String curp = jwt.getClaim("curp").asString();
-        String result = transactionService.getUserTransactions(curp);
-        sendResponse(result, exchange, 200);
+        String targetUrl = getNextUrl(transactionUrls, transactionIdx) + "/transactions?curp=" + curp;
+        proxyRequest(exchange, targetUrl, "GET");
     }
 
-    // --- MÉTODOS DE ADMIN (STATS, USERS, CHARTS, LOGS) ---
+    // Helper para rutas protegidas genéricas (POST/PUT)
+    private void handleAuthenticatedProxy(HttpExchange exchange, List<String> urlPool, String path, String method) throws IOException {
+        if (handleCORS(exchange)) return;
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
+        String curp = jwt.getClaim("curp").asString();
+        String targetUrl = getNextUrl(urlPool, accountIdx) + path;
+        // Si es /operate y método POST, inyectar el curp en el body
+        if ("/operate".equals(path) && method.equalsIgnoreCase("POST")) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            exchange.getRequestBody().transferTo(baos);
+            String bodyStr = baos.toString(StandardCharsets.UTF_8);
+            com.google.gson.JsonObject json = new com.google.gson.JsonParser().parse(bodyStr).getAsJsonObject();
+            json.addProperty("curp", curp);
+            byte[] newBody = json.toString().getBytes(StandardCharsets.UTF_8);
+            proxyRequestWithBody(exchange, targetUrl, method, newBody);
+        } else if ("/transfer".equals(path) && method.equalsIgnoreCase("POST")) {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            exchange.getRequestBody().transferTo(baos);
+            String bodyStr = baos.toString(StandardCharsets.UTF_8);
+            com.google.gson.JsonObject json = new com.google.gson.JsonParser().parse(bodyStr).getAsJsonObject();
+            json.addProperty("sourceCurp", curp);
+            byte[] newBody = json.toString().getBytes(StandardCharsets.UTF_8);
+            proxyRequestWithBody(exchange, targetUrl, method, newBody);
+        } else {
+            proxyRequest(exchange, targetUrl, method);
+        }
+    }
+
+    // Proxy con body modificado
+    private void proxyRequestWithBody(HttpExchange exchange, String targetUrl, String method, byte[] body) throws IOException {
+        if (handleCORS(exchange)) return;
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(targetUrl);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod(method);
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(5000);
+            String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+            if (authHeader != null) conn.setRequestProperty("Authorization", authHeader);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body);
+            }
+            int status = conn.getResponseCode();
+            InputStream respStream = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+            byte[] responseBytes;
+            if (respStream != null) {
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                respStream.transferTo(buffer);
+                responseBytes = buffer.toByteArray();
+                respStream.close();
+            } else {
+                responseBytes = new byte[0];
+            }
+            sendResponse(exchange, status, responseBytes);
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendResponse(exchange, 502, "{\"error\": \"Error de comunicación con microservicio: " + e.getMessage() + "\"}");
+        }
+    }
     
-    private void handleAdminStatsRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        String result = adminService.getStats();
-        sendResponse(result, exchange, 200);
+
+    // Helper para rutas simples sin modificación de URL
+    private void handleSimpleProxy(HttpExchange exchange, String targetUrl) throws IOException {
+        // Reenviar query string si existe
+        String query = exchange.getRequestURI().getQuery();
+        String fullUrl = targetUrl;
+        if (query != null && !query.isEmpty()) {
+            fullUrl += (targetUrl.contains("?") ? "&" : "?") + query;
+        }
+        proxyRequest(exchange, fullUrl, exchange.getRequestMethod());
     }
 
-    private void handleAdminUsersRequest(HttpExchange exchange) throws IOException {
+    // ================= NÚCLEO: PROXY GENÉRICO =================
+
+    /**
+     * Método centralizado para reenviar peticiones a microservicios.
+     * Maneja Input/Output streams, cabeceras y códigos de respuesta.
+     */
+    private void proxyRequest(HttpExchange exchange, String targetUrl, String method) throws IOException {
         if (handleCORS(exchange)) return;
-        String result = adminService.getUsers();
-        sendResponse(result, exchange, 200);
+        
+        // Validar método si es necesario, o forzar el método deseado
+        if (!method.equals(exchange.getRequestMethod()) && !method.equals("GET")) {
+             // Si forzamos POST pero viene OPTIONS, el CORS lo maneja. Si viene GET, error.
+             if(!exchange.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
+                 sendResponse(exchange, 405, "{\"error\": \"Method not allowed\"}");
+                 return;
+             }
+        }
+
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(targetUrl);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod(method);
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(5000);
+            
+            // Copiar cabeceras relevantes
+            String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+            if (authHeader != null) conn.setRequestProperty("Authorization", authHeader);
+            conn.setRequestProperty("Content-Type", "application/json");
+
+            // Si hay cuerpo (POST/PUT), reenviarlo
+            if (exchange.getRequestMethod().equalsIgnoreCase("POST") || exchange.getRequestMethod().equalsIgnoreCase("PUT")) {
+                conn.setDoOutput(true);
+                try (OutputStream os = conn.getOutputStream(); InputStream is = exchange.getRequestBody()) {
+                    is.transferTo(os); // Java 9+: Transferencia eficiente de bytes
+                }
+            }
+
+            // Leer respuesta del microservicio
+            int status = conn.getResponseCode();
+            InputStream respStream = (status >= 200 && status < 300) ? conn.getInputStream() : conn.getErrorStream();
+            
+            byte[] responseBytes;
+            if (respStream != null) {
+                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                respStream.transferTo(buffer);
+                responseBytes = buffer.toByteArray();
+                respStream.close();
+            } else {
+                responseBytes = new byte[0];
+            }
+
+            // Enviar respuesta al cliente original
+            sendResponse(exchange, status, responseBytes);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendResponse(exchange, 502, "{\"error\": \"Error de comunicación con microservicio: " + e.getMessage() + "\"}");
+        }
     }
 
-    private void handleAdminChartsRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        String result = adminService.getCharts();
-        sendResponse(result, exchange, 200);
+    // ================= UTILIDADES =================
+
+    private String getNextUrl(List<String> urls, AtomicInteger idx) {
+        if (urls.isEmpty()) throw new RuntimeException("No hay URLs configuradas para el servicio");
+        // Lógica Round-Robin segura
+        int i = idx.getAndIncrement();
+        if (i < 0) { idx.set(0); i = 0; } // Evitar overflow
+        return urls.get(i % urls.size());
     }
 
-    private void handleAdminUserLogsRequest(HttpExchange exchange) throws IOException {
-        if (handleCORS(exchange)) return;
-        String userId = parseQuery(exchange.getRequestURI().getQuery()).get("userId");
-        if (userId == null) { sendResponse("[]", exchange, 400); return; }
-        String result = adminService.getUserLogs(userId);
-        sendResponse(result, exchange, 200);
+    private DecodedJWT validateToken(HttpExchange exchange) throws IOException {
+        String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            sendResponse(exchange, 401, "{\"error\": \"Token faltante\"}");
+            return null;
+        }
+        try {
+            String token = authHeader.substring(7);
+            JWTVerifier verifier = JWT.require(Algorithm.HMAC256(JWT_SECRET)).build();
+            return verifier.verify(token);
+        } catch (Exception e) {
+            sendResponse(exchange, 401, "{\"error\": \"Token inválido\"}");
+            return null;
+        }
     }
 
-    // --- UTILERÍAS ---
     private boolean handleCORS(HttpExchange exchange) throws IOException {
-        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type,Authorization,X-User-Curp");
+        if (!exchange.getResponseHeaders().containsKey("Access-Control-Allow-Origin")) {
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type,Authorization");
+        }
         if (exchange.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
             exchange.sendResponseHeaders(204, -1);
             return true;
@@ -229,48 +297,16 @@ public class WebServer {
         return false;
     }
 
-    private void sendResponse(String json, HttpExchange exchange, int status) throws IOException {
-        byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Cache-Control", "no-cache");
+    private void sendResponse(HttpExchange exchange, int status, String json) throws IOException {
+        sendResponse(exchange, status, json.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void sendResponse(HttpExchange exchange, int status, byte[] body) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", "application/json");
-        exchange.sendResponseHeaders(status, bytes.length);
-        OutputStream os = exchange.getResponseBody();
-        os.write(bytes);
-        os.close();
-    }
-
-    private Map<String, String> parseQuery(String query) {
-        Map<String, String> result = new HashMap<>();
-        if (query == null) return result;
-        for (String param : query.split("&")) {
-            String[] entry = param.split("=");
-            if (entry.length > 1) result.put(entry[0], entry[1]);
+        // No añadir Access-Control-Allow-Origin aquí, solo en handleCORS
+        exchange.sendResponseHeaders(status, body.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
         }
-        return result;
     }
-
-    private String generateAccountNumber() {
-        return "4152" + String.format("%012d", new Random().nextLong(1000000000000L));
-    }
-
-    private String hashPassword(String plainText) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] encodedhash = digest.digest(plainText.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
-            for (byte b : encodedhash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
-                hexString.append(hex);
-            }
-            return hexString.toString();
-        } catch (Exception e) { throw new RuntimeException(e); }
-    }
-
-    // --- DTOs ---
-    static class LoginRequest { String curp, password; }
-    static class RegisterRequest { String curp, password, name; }
-    static class OperationRequest { String curp, type; double amount; }
-    static class TransferRequest { String sourceCurp, targetCurp, description; double amount; }
-    static class TransactionResponse { String id, date, type, description, status; double amount; TransactionResponse(String i, String d, String t, double a, String de, String s){id=i;date=d;type=t;amount=a;description=de;status=s;} }
 }

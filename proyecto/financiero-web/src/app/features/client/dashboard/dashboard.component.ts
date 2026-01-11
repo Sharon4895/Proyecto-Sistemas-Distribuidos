@@ -37,6 +37,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private updateSubscription: Subscription | null = null;
 
   userName: string | null = null;
+  userCurp: string | null = null;
   transactions: Transaction[] = [];
   balance: number = 0;
   isLoading: boolean = true;
@@ -50,6 +51,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadBalance();
     const user = this.authService.getUserFromToken();
     this.userName = user?.name || null;
+    this.userCurp = user?.curp || null;
     this.loadTransactions();
 
     this.refreshData();
@@ -134,13 +136,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   confirmTransaction() {
     if (this.amount && this.amount > 0) {
-      
       const type = this.transactionType === 'DEPOSIT' ? 'DEPOSIT' : 'WITHDRAW';
-      
-      // Usar el servicio
       this.accountService.operate(type, this.amount).subscribe({
-        
-        // 1. Caso de ÉXITO (Next)
         next: () => {
           this.messageService.add({
             severity: 'success',
@@ -148,32 +145,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
             detail: `Has realizado un ${this.transactionType === 'DEPOSIT' ? 'depósito' : 'retiro'} de $${this.amount}`,
             life: 3000
           });
-          
-          this.displayModal = false; // Cerramos el modal
-          this.amount = null;        // Limpiamos el campo
-          this.loadBalance();        // Recargamos el saldo nuevo
+          this.displayModal = false;
+          this.amount = null;
+          this.loadBalance();
+          this.loadTransactions(); // <--- Recargar movimientos recientes
         },
-
-        // 2. Caso de ERROR (Aquí entra cuando throwError se activa en el servicio)
         error: (err) => {
           this.messageService.add({
-            severity: 'error',       // Rojo
+            severity: 'error',
             summary: 'Operación Rechazada',
-            detail: err.message || 'No tienes fondos suficientes para realizar este retiro.', // Mensaje para el usuario
+            detail: err.message || 'No tienes fondos suficientes para realizar este retiro.',
             life: 3000
           });
-          // Nota: NO cerramos el modal (displayModal = false) para que el usuario pueda corregir el monto.
         }
       });
-
     } else {
-        // Validación local (Monto 0 o negativo)
-        this.messageService.add({
-            severity: 'error',
-            summary: 'Error',
-            detail: 'El monto debe ser mayor a 0',
-            life: 3000
-        });
+      this.messageService.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'El monto debe ser mayor a 0',
+        life: 3000
+      });
     }
   }
   

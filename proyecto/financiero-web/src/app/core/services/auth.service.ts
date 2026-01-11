@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap, BehaviorSubject } from 'rxjs'; // <--- IMPRESCINDIBLE
 import { User } from '../models/financial.models';
 import { decodeJwt } from '../utils/jwt.util';
-
+import { environment } from '../../../environments/environment';
 @Injectable({ providedIn: 'root' })
 export class AuthService {
       // Obtener datos del usuario desde el JWT
@@ -16,8 +16,8 @@ export class AuthService {
     register(curp: string, password: string, name: string) {
       return this.http.post<any>(`${this.apiUrl}/register`, { curp, password, name });
     }
-  
-  private apiUrl = 'http://localhost:8080/api/auth'; 
+
+    private apiUrl = environment.apiUrl + '/auth';
 
   // Fuente de verdad: solo el token
   private currentTokenSubject: BehaviorSubject<string | null>;

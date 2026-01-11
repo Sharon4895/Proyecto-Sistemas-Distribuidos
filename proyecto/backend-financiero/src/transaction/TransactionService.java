@@ -1,3 +1,4 @@
+
 package transaction;
 
 import java.sql.*;
@@ -5,10 +6,44 @@ import com.google.gson.Gson;
 import pubsub.PubSubSimulator;
 import audit.AuditService;
 
+/**
+ * Servicio de transacciones listo para despliegue distribuido.
+ * DB_URL, DB_USER y DB_PASS se pueden parametrizar por variables de entorno.
+ * Ejemplo de ejecución:
+ *   DB_URL=jdbc:mysql://host/db DB_USER=usuario DB_PASS=clave java -cp ... transaction.TransactionService
+ */
 public class TransactionService {
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true";
-    private static final String DB_USER = "root";
-    private static final String DB_PASS = "root";
+    public static void main(String[] args) {
+        int port = 8083;
+        try {
+            com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(port), 0);
+            TransactionService service = new TransactionService();
+            server.createContext("/transactions", exchange -> {
+                if ("GET".equals(exchange.getRequestMethod())) {
+                    String query = exchange.getRequestURI().getQuery();
+                    String curp = null;
+                    if (query != null && query.startsWith("curp=")) {
+                        curp = query.substring(5);
+                    }
+                    String response = service.getUserTransactions(curp);
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+                    exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                } else {
+                    exchange.sendResponseHeaders(405, -1);
+                }
+                exchange.close();
+            });
+            server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+            System.out.println("TransactionService escuchando en el puerto " + port);
+            server.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true");
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "root");
     private final Gson gson = new Gson();
 
     // Simulador Pub/Sub y servicio de auditoría

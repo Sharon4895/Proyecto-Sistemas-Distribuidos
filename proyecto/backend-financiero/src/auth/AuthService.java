@@ -1,3 +1,4 @@
+
 package auth;
 
 import com.auth0.jwt.JWT;
@@ -11,11 +12,62 @@ import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.Date;
 
+/**
+ * Servicio de autenticación listo para despliegue distribuido.
+ * DB_URL, DB_USER y DB_PASS se pueden parametrizar por variables de entorno.
+ * Ejemplo de ejecución:
+ *   DB_URL=jdbc:mysql://host/db DB_USER=usuario DB_PASS=clave java -cp ... auth.AuthService
+ */
 public class AuthService {
+    public static void main(String[] args) {
+        int port = 8081;
+        try {
+            com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(port), 0);
+            AuthService service = new AuthService();
+            server.createContext("/login", exchange -> {
+                if ("POST".equals(exchange.getRequestMethod())) {
+                    try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                        java.util.Map<String, String> body = new com.google.gson.Gson().fromJson(isr, java.util.Map.class);
+                        String curp = body.get("curp");
+                        String password = body.get("password");
+                        String response = service.login(curp, password);
+                        exchange.getResponseHeaders().add("Content-Type", "application/json");
+                        exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+                        exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
+                    }
+                } else {
+                    exchange.sendResponseHeaders(405, -1);
+                }
+                exchange.close();
+            });
+            server.createContext("/register", exchange -> {
+                if ("POST".equals(exchange.getRequestMethod())) {
+                    try (InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8)) {
+                        java.util.Map<String, String> body = new com.google.gson.Gson().fromJson(isr, java.util.Map.class);
+                        String curp = body.get("curp");
+                        String password = body.get("password");
+                        String name = body.get("name");
+                        String response = service.register(curp, password, name);
+                        exchange.getResponseHeaders().add("Content-Type", "application/json");
+                        exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+                        exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
+                    }
+                } else {
+                    exchange.sendResponseHeaders(405, -1);
+                }
+                exchange.close();
+            });
+            server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+            System.out.println("AuthService escuchando en el puerto " + port);
+            server.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     private static final String JWT_SECRET = "super_secret_key_2026";
-    private static final String DB_URL = "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true";
-    private static final String DB_USER = "root";
-    private static final String DB_PASS = "root";
+    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true");
+    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
+    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "root");
     private final Gson gson = new Gson();
 
     public String register(String curp, String password, String name) {

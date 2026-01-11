@@ -1,0 +1,7 @@
+AdminService escuchando en el puerto 8085
+[ADMIN] getUserLogs llamado con userId=1
+[ADMIN] Movimientos encontrados para userId=1: 15
+[ADMIN] getUserLogs llamado con userId=65
+[ADMIN] Movimientos encontrados para userId=65: 8
+[ADMIN] getUserLogs llamado con userId=66
+[ADMIN] Movimientos encontrados para userId=66: 9

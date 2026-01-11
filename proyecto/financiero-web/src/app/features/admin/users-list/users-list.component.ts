@@ -75,12 +75,18 @@ export class UsersListComponent implements OnInit {
   }
 
   viewUserLogs(user: any) {
+    console.log('[DEBUG] viewUserLogs user:', user);
     this.selectedUser = user;
     this.userTransactions = []; // Limpiar anterior
     this.displayDialog = true;  // Abrir modal inmediatamente
 
-    // Pedir los datos reales al backend
-    this.adminService.getUserLogs(user.id).subscribe({
+    if (user.id === undefined || user.id === null) {
+      console.error('[ERROR] user.id es undefined o null');
+      return;
+    }
+    const userIdStr = String(user.id);
+    console.log('[DEBUG] Llamando getUserLogs con userId:', userIdStr);
+    this.adminService.getUserLogs(userIdStr).subscribe({
       next: (data) => {
         this.userTransactions = data;
       },
