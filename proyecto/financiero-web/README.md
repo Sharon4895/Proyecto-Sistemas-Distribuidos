@@ -57,18 +57,26 @@ Por defecto, el frontend se comunica con el backend en `http://localhost:8080` u
 
 Busca la línea con `http://localhost:8080` y reemplázala por la URL de tu backend.
 
-## Variables de entorno
-Puedes mover la URL del backend a los archivos de entorno en `src/environments` para manejar múltiples entornos fácilmente.
+## Configuración de entornos
 
-## Producción
-Para construir el frontend para producción:
+- Para desarrollo, la API apunta a `http://localhost:8080/api` (ver `src/environments/environment.ts`).
+- Para producción, edita `src/environments/environment.prod.ts` y coloca la URL real del backend desplegado.
+
+## Despliegue en producción
+
 ```bash
 npm run build -- --configuration production
+# Los archivos estarán en dist/financiero-web
 ```
-Los archivos estarán en `dist/financiero-web`.
+
+- Sube el contenido de `dist/financiero-web` a tu servidor web o bucket S3.
+- Asegúrate de que el backend esté accesible desde la URL configurada en `environment.prod.ts`.
 
 ## Notas
 - El login muestra un mensaje claro si las credenciales son incorrectas.
 - El sistema incluye navegación fácil con botones de regreso en las vistas de admin y cliente.
+- El frontend es responsivo y soporta rutas protegidas por roles.
+- Los servicios de Angular (`auth.service.ts`, `account.service.ts`, `admin.service.ts`) usan la URL del entorno.
+- Para integración con AWS, asegúrate de que los endpoints estén correctamente configurados.
 
 
