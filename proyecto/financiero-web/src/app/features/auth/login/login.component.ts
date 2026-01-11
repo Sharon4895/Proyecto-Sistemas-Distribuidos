@@ -62,12 +62,16 @@ export class LoginComponent {
             detail: 'Iniciando sesión...'
           });
           setTimeout(() => {
-            this.router.navigate(['/client/dashboard']);
+            const user = this.authService.getUserFromToken();
+            if (user?.role === 'ADMIN') {
+              this.router.navigate(['/admin/dashboard']);
+            } else {
+              this.router.navigate(['/client/dashboard']);
+            }
           }, 1000);
         },
         error: (err: any) => {
           this.loading = false;
-          console.error('Error login:', err);
           let msg = 'Ocurrió un error';
           if (err.status === 401) {
             msg = 'Datos incorrectos. Verifica tu CURP y contraseña.';

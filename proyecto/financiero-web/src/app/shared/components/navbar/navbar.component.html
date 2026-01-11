@@ -1,24 +1,23 @@
-<nav class="bg-white border-b border-gray-200 px-4 py-3 shadow-sm fixed w-full top-0 z-50">
-    <div class="container mx-auto flex justify-between items-center">
-        
+
+<nav class="bg-white border-b border-gray-200 px-2 py-2 shadow-sm fixed w-full top-0 z-50">
+    <div class="flex justify-between items-center w-full max-w-screen-lg mx-auto">
         <div class="flex items-center gap-2 cursor-pointer" routerLink="/">
             <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                 <i class="pi pi-wallet text-white text-xl"></i>
             </div>
-            <span class="text-xl font-bold text-gray-800 tracking-tight">Financiero<span class="text-blue-600">Web</span></span>
+            <span class="text-lg md:text-xl font-bold text-gray-800 tracking-tight">Financiero<span class="text-blue-600">Web</span></span>
         </div>
 
-        <div *ngIf="currentUser" class="flex items-center gap-4">
-            <span class="hidden md:block text-sm text-gray-500">Hola, {{ currentUser.name }}</span>
+        <div *ngIf="isAuthenticated" class="flex items-center gap-2 md:gap-4">
+            <span class="text-xs md:text-sm text-gray-500" *ngIf="userName">Hola, {{ userName }}</span>
             <p-button 
-            icon="pi pi-power-off" 
-            styleClass="p-button-rounded p-button-text p-button-danger" 
-            (onClick)="logout()" 
-            pTooltip="Cerrar Sesión"
-            tooltipPosition="bottom">
-        </p-button>
+                icon="pi pi-power-off" 
+                styleClass="p-button-rounded p-button-text p-button-danger" 
+                (onClick)="logout()" 
+                pTooltip="Cerrar Sesi3n"
+                tooltipPosition="bottom">
+            </p-button>
         </div>
     </div>
 </nav>
-
-<div class="h-16"></div>
+<div class="h-14 md:h-16"></div>

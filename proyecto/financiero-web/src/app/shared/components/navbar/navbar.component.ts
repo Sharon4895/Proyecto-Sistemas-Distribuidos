@@ -14,19 +14,28 @@ import { User } from '../../../core/models/financial.models';
   styleUrl: './navbar.component.scss'
 })
 export class NavbarComponent implements OnInit {
-  currentUser: User | null = null;
+  isAuthenticated = false;
+  userName: string | null = null;
+  private tokenSubscription: any;
 
   constructor(private authService: AuthService, private router: Router) {}
 
   ngOnInit() {
-    // Al cargar el header, leemos quién es el usuario
-    this.authService.currentUser$.subscribe(user => {
-      this.currentUser = user;
+    this.tokenSubscription = this.authService.currentToken$.subscribe(token => {
+      this.isAuthenticated = !!token;
+      const user = this.authService.getUserFromToken();
+      this.userName = user?.name || null;
     });
   }
 
   logout() {
     this.authService.logout();
-    this.router.navigate(['/auth/login']);
+    this.router.navigate(['/login']);
+  }
+
+  ngOnDestroy() {
+    if (this.tokenSubscription) {
+      this.tokenSubscription.unsubscribe();
+    }
   }
 }

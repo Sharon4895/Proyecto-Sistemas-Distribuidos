@@ -22,14 +22,15 @@
                     
                     <div class="p-inputgroup">
                         <span class="p-inputgroup-addon bg-gray-50"><i class="pi pi-user"></i></span>
-                        <input 
-                            pInputText 
-                            id="targetCurp" 
-                            formControlName="targetCurp" 
-                            placeholder="Ingresa el CURP del destinatario" 
-                            class="w-full p-3" 
-                            [maxlength]="18"
-                        />
+                            <input 
+                                pInputText 
+                                id="targetCurp" 
+                                formControlName="targetCurp" 
+                                placeholder="Ingresa el CURP del destinatario" 
+                                class="w-full p-3" 
+                                [maxlength]="18"
+                                [disabled]="loading"
+                            />
                     </div>
                     <small class="text-red-500" *ngIf="transferForm.get('targetCurp')?.invalid && transferForm.get('targetCurp')?.touched">
                         El CURP es requerido (mínimo 18 caracteres).
@@ -39,14 +40,15 @@
                     <label for="description" class="font-semibold text-gray-700">Concepto / Motivo</label>
                     <div class="p-inputgroup">
                         <span class="p-inputgroup-addon bg-gray-50"><i class="pi pi-tag"></i></span>
-                        <input 
-                            pInputText 
-                            id="description" 
-                            formControlName="description" 
-                            placeholder="Ej. Pago de cena, Renta..." 
-                            class="w-full p-3" 
-                            maxlength="50"
-                        />
+                            <input 
+                                pInputText 
+                                id="description" 
+                                formControlName="description" 
+                                placeholder="Ej. Pago de cena, Renta..." 
+                                class="w-full p-3" 
+                                maxlength="50"
+                                [disabled]="loading"
+                            />
                     </div>
                     <small class="text-gray-500">Opcional. Máximo 50 caracteres.</small>
                 </div>
@@ -69,13 +71,15 @@
                     </small>
                 </div>
                 
-                <p-button 
-                    label="Confirmar Transferencia" 
-                    icon="pi pi-check" 
-                    type="submit" 
-                    [loading]="loading"
-                    styleClass="w-full mt-4 p-3 text-lg font-bold bg-blue-600 border-none w-full">
-                </p-button>
+                    <button 
+                        type="submit" 
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-lg border-none cursor-pointer"
+                        [disabled]="loading || transferForm.invalid"
+                    >
+                        <i *ngIf="loading" class="pi pi-spin pi-spinner"></i>
+                        <span *ngIf="!loading">Enviar Transferencia</span>
+                        <span *ngIf="loading">Procesando...</span>
+                    </button>
 
             </form>
         </div>

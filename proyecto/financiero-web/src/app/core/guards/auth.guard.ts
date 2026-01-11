@@ -7,30 +7,11 @@ export const authGuard: CanActivateFn = (route, state) => {
   const authService = inject(AuthService);
   const router = inject(Router);
 
-  // A. ¿Está logueado?
+  // Solo verifica si hay token
   if (!authService.isAuthenticated()) {
-    router.navigate(['/login']);
-    return false;
+    return router.parseUrl('/login');
   }
-
-  // B. Verificación de Roles
-  const userRole = authService.getUserRole();
-  const requiredRole = route.data['role']; // Leemos qué rol pide la ruta
-
-  // Si la ruta pide un rol específico y no coincide...
-  if (requiredRole && userRole !== requiredRole) {
-    // Si es ADMIN intentando entrar a Client -> Lo mandamos a su Admin Dashboard
-    if (userRole === 'ADMIN') {
-      router.navigate(['/admin/dashboard']);
-    } 
-    // Si es USER intentando entrar a Admin -> Lo mandamos a su Client Dashboard
-    else {
-      router.navigate(['/client/dashboard']);
-    }
-    return false;
-  }
-
-  return true; // Pase usted
+  return true;
 };
 
 // GUARDIA 2: Protege el Login (Si ya estás dentro, te saca de ahí)
@@ -39,15 +20,12 @@ export const publicGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
 
   if (authService.isAuthenticated()) {
-    const role = authService.getUserRole();
-    // Si ya está logueado, redirigir según su rol
-    if (role === 'ADMIN') {
-      router.navigate(['/admin/dashboard']);
+    const user = authService.getUserFromToken();
+    if (user?.role === 'ADMIN') {
+      return router.parseUrl('/admin/dashboard');
     } else {
-      router.navigate(['/client/dashboard']);
+      return router.parseUrl('/client/dashboard');
     }
-    return false;
   }
-  
-  return true; // Si no está logueado, puede ver el login
+  return true;
 };

@@ -6,7 +6,7 @@
         <div>
             <h1 class="text-3xl font-bold text-gray-800">Resumen de Cuenta</h1>
             <p class="text-gray-500 mt-1">
-                Bienvenido de nuevo, <span class="font-semibold text-blue-600">{{ currentUser?.name || 'Usuario' }}</span>
+                Bienvenido de nuevo, <span class="font-semibold text-blue-600">{{ userName || 'Usuario' }}</span>
             </p>
         </div>
         <button (click)="refreshData()" class="p-2 text-gray-400 hover:text-blue-600 transition-colors" title="Actualizar datos">
@@ -24,14 +24,16 @@
                 <div>
                     <span class="text-blue-100 text-sm font-medium uppercase tracking-wider">Saldo Disponible</span>
                     <div class="text-4xl md:text-5xl font-bold mt-2 flex items-center gap-3 h-16">
-                         <i *ngIf="isLoading" class="pi pi-spin pi-spinner text-4xl opacity-50"></i>
-                        
-                        <ng-container *ngIf="!isLoading">
+                        <i *ngIf="isLoading" class="pi pi-spin pi-spinner text-4xl opacity-50"></i>
+                        <ng-container *ngIf="!isLoading && !balanceError">
                             {{ balance | currency:'MXN':'symbol-narrow':'1.2-2' }}
                             <span class="text-xl md:text-2xl opacity-70 font-normal">MXN</span>
                         </ng-container>
+                        <ng-container *ngIf="balanceError">
+                            <span class="text-red-200 text-base">{{ balanceError }}</span>
+                        </ng-container>
                     </div>
-                    <p class="text-blue-200 text-sm mt-1 font-mono tracking-wider">{{ currentUser?.curp }}</p>
+                    <p class="text-blue-200 text-sm mt-1 font-mono tracking-wider">{{ userName }}</p>
                 </div>
 
             </div>
@@ -73,21 +75,24 @@
         
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             
-            <div *ngIf="transactions.length === 0" class="p-8 text-center text-gray-400">
+            <div *ngIf="isTxLoading" class="p-8 text-center text-gray-400">
+                <i class="pi pi-spin pi-spinner text-3xl mb-3 block"></i>
+                <p>Cargando movimientos...</p>
+            </div>
+            <div *ngIf="!isTxLoading && txError" class="p-8 text-center text-red-400">
+                <i class="pi pi-times-circle text-4xl mb-3 block"></i>
+                <p>{{ txError }}</p>
+            </div>
+            <div *ngIf="!isTxLoading && !txError && transactions.length === 0" class="p-8 text-center text-gray-400">
                 <i class="pi pi-inbox text-4xl mb-3 block"></i>
                 <p>No hay movimientos recientes.</p>
             </div>
-
-            <div class="divide-y divide-gray-100">
-                
+            <div *ngIf="!isTxLoading && !txError && transactions.length > 0" class="divide-y divide-gray-100">
                 <div *ngFor="let tx of transactions" class="p-4 hover:bg-gray-50 transition-colors flex items-center justify-between gap-3 cursor-pointer">
-                    
                     <div class="flex items-center gap-3 overflow-hidden">
-                        
                         <div [ngClass]="getColorClass(tx.type)" class="w-10 h-10 rounded-full flex items-center justify-center shrink-0">
                             <i [class]="getIcon(tx.type)"></i>
                         </div>
-                        
                         <div class="flex flex-col min-w-0">
                             <span class="font-bold text-gray-800 truncate block">
                                 {{ tx.description || 'Movimiento' }}
@@ -97,7 +102,6 @@
                             </span>
                         </div>
                     </div>
-
                     <div class="text-right whitespace-nowrap pl-2">
                         <span class="text-lg font-bold block" 
                               [class.text-green-600]="isIncome(tx.type)" 
@@ -108,9 +112,7 @@
                             {{ tx.type === 'TRANSFER_SENT' ? 'ENVÍO' : (tx.type === 'TRANSFER_RECEIVED' ? 'RECIBO' : tx.type) }}
                         </span>
                     </div>
-
                 </div>
-
             </div>
         </div>
     </div>

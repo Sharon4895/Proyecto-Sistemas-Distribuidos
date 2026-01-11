@@ -43,11 +43,11 @@ export class TransferComponent {
     private router: Router
   ) {
     // Validaciones del formulario
-    this.transferForm = this.fb.group({
-      targetCurp: ['', [Validators.required, Validators.minLength(1)]], // CURP destino
-      amount: [null, [Validators.required, Validators.min(1)]],
-      description: ['', [Validators.maxLength(50)]]
-    });
+        this.transferForm = this.fb.group({
+          targetCurp: ['', [Validators.required, Validators.minLength(18)]], // CURP destino
+          amount: [null, [Validators.required, Validators.min(1)]],
+          description: ['', [Validators.maxLength(50)]]
+        });
   }
 
   onTransfer() {

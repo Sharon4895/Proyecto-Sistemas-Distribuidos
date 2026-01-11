@@ -32,9 +32,8 @@ export class RegisterComponent {
   onSubmit() {
     if (this.registerForm.valid) {
       const { nombre, curp, password } = this.registerForm.value;
-      // Llamada al backend usando AuthService
       this.authService.register(curp, password, nombre).subscribe({
-        next: (response) => {
+        next: () => {
           this.messageService.add({
             severity: 'success',
             summary: '¡Bienvenido!',

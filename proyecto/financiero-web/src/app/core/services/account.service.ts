@@ -10,50 +10,44 @@ export class AccountService {
 
   constructor(private http: HttpClient) { }
 
-  // Obtener CURP del usuario logueado (guardado en localStorage por AuthService)
-  private getCurp(): string {
-    const userStr = localStorage.getItem('current_user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      return user.curp || '';
-    }
-    return '';
+  // Obtener token del usuario logueado
+  private getToken(): string {
+    return localStorage.getItem('auth_token') || '';
   }
 
   // --- CONSULTAR SALDO REAL ---
   getBalance(): Observable<any> { // Cambiamos return a 'any' porque el back devuelve {balance: N}
-    const headers = new HttpHeaders().set('X-User-Curp', this.getCurp());
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${this.getToken()}`);
     return this.http.get<{balance: number}>(`${this.apiUrl}/account/balance`, { headers })
       .pipe(
-        // Extraemos solo el número de la respuesta JSON
         tap(res => console.log('Saldo real recibido:', res))
       );
   }
 
   // --- CONSULTAR HISTORIAL REAL ---
   getTransactions(): Observable<Transaction[]> {
-    const headers = new HttpHeaders().set('X-User-Curp', this.getCurp());
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${this.getToken()}`);
     return this.http.get<Transaction[]>(`${this.apiUrl}/transactions`, { headers });
   }
 
   // --- OPERAR REALMENTE ---
   operate(type: 'DEPOSIT' | 'WITHDRAW', amount: number): Observable<any> {
     const body = {
-      curp: this.getCurp(),
       type: type,
       amount: amount
     };
-    return this.http.post(`${this.apiUrl}/account/operate`, body);
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${this.getToken()}`);
+    return this.http.post(`${this.apiUrl}/account/operate`, body, { headers });
   }
 
   // En AccountService
   transfer(targetCurp: string, amount: number, description: string): Observable<any> {
     const body = {
-      sourceCurp: this.getCurp(),
       targetCurp: targetCurp,
       amount: amount,
-      description: description // <--- ¡AQUÍ SE ENVÍA AL BACKEND!
+      description: description
     };
-    return this.http.post(`${this.apiUrl}/account/transfer`, body);
+    const headers = new HttpHeaders().set('Authorization', `Bearer ${this.getToken()}`);
+    return this.http.post(`${this.apiUrl}/account/transfer`, body, { headers });
   }
 }

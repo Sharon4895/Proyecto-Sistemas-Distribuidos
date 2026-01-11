@@ -1,7 +1,7 @@
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.google.gson.Gson; 
-
+import com.auth0.jwt.interfaces.DecodedJWT;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InputStreamReader;
@@ -10,9 +10,26 @@ import java.net.InetSocketAddress;
 import java.sql.*;
 import java.util.concurrent.Executors;
 import java.util.*;
-import java.security.MessageDigest; 
+import auth.AuthService;
 
 public class WebServer {
+        // Método auxiliar para validar JWT y obtener claims
+        private DecodedJWT validateToken(HttpExchange exchange) throws IOException {
+            String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                sendResponse("{\"error\": \"Token faltante\"}", exchange, 401);
+                return null;
+            }
+            String token = authHeader.substring(7);
+            try {
+                JWTVerifier verifier = JWT.require(Algorithm.HMAC256(JWT_SECRET)).build();
+                return verifier.verify(token);
+            } catch (Exception e) {
+                sendResponse("{\"error\": \"Token inválido\"}", exchange, 401);
+                return null;
+            }
+        }
+    private static final String JWT_SECRET = "super_secret_key_2026";
 
     private static final String DB_URL = "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true";
     private static final String DB_USER = "root";
@@ -28,6 +45,7 @@ public class WebServer {
     private final int port;
     private HttpServer server;
     private final Gson gson = new Gson(); 
+    private final AuthService authService = new AuthService();
 
     public static void main(String[] args) {
         int serverPort = 8080;
@@ -93,108 +111,39 @@ public class WebServer {
 
     // ================= HANDLERS (MÉTODOS) =================
 
-    // 1. REGISTRO (CON HASH Y USERNAME)
+    // 1. REGISTRO (Delegado a AuthService)
     private void handleRegisterRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
         if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-
         InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
         RegisterRequest req = gson.fromJson(isr, RegisterRequest.class);
-
-        if (req.curp == null || req.password == null || req.name == null) {
-            sendResponse("{\"error\": \"Datos incompletos\"}", exchange, 400); return;
-        }
-
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-            conn.setAutoCommit(false); 
-
-            // Verificar duplicados
-            PreparedStatement checkStmt = conn.prepareStatement("SELECT id FROM users WHERE curp = ?");
-            checkStmt.setString(1, req.curp);
-            if (checkStmt.executeQuery().next()) {
-                conn.rollback();
-                sendResponse("{\"error\": \"El CURP ya está registrado\"}", exchange, 409);
-                return;
-            }
-
-            // Generar Username y Hash
-            //String generatedUsername = generateUniqueUsername(req.curp);
-            String hashedPassword = hashPassword(req.password);
-
-            // Insertar Usuario
-            String sqlUser = "INSERT INTO users (name, curp, password, role) VALUES (?, ?, ?, 'USER')";
-            PreparedStatement psUser = conn.prepareStatement(sqlUser, Statement.RETURN_GENERATED_KEYS);
-            psUser.setString(1, req.name);
-            //psUser.setString(2, generatedUsername);
-            psUser.setString(2, req.curp);
-            psUser.setString(3, hashedPassword); 
-            
-            int affectedRows = psUser.executeUpdate();
-            if (affectedRows == 0) { conn.rollback(); throw new SQLException("Fallo al crear usuario"); }
-
-            long newUserId = 0;
-            try (ResultSet generatedKeys = psUser.getGeneratedKeys()) {
-                if (generatedKeys.next()) newUserId = generatedKeys.getLong(1);
-                else { conn.rollback(); throw new SQLException("No se obtuvo ID"); }
-            }
-
-            // Crear Cuenta (Saldo inicial 0)
-            String sqlAcc = "INSERT INTO accounts (user_id, balance) VALUES (?, ?)";
-            PreparedStatement psAcc = conn.prepareStatement(sqlAcc);
-            psAcc.setLong(1, newUserId);
-            psAcc.setDouble(2, 0.00); 
-            psAcc.executeUpdate();
-
-            conn.commit(); 
-            //System.out.println("Nuevo usuario registrado: " + req.name + " (" + generatedUsername + ")");
-            sendResponse("{\"success\": true, \"message\": \"Usuario registrado\"}", exchange, 201);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            sendResponse("{\"error\": \"Error interno\"}", exchange, 500);
-        }
+        String result = authService.register(req.curp, req.password, req.name);
+        int status = result.contains("success") ? 201 : (result.contains("ya está registrado") ? 409 : 400);
+        sendResponse(result, exchange, status);
     }
 
-    // 2. LOGIN (CON HASH Y TOKEN)
+    // 2. LOGIN (Delegado a AuthService)
     private void handleLoginRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
         if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-
         InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
         LoginRequest req = gson.fromJson(isr, LoginRequest.class);
-
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-            String sql = "SELECT id, name, role FROM users WHERE curp = ? AND password = ?";
-            PreparedStatement pstmt = conn.prepareStatement(sql);
-            pstmt.setString(1, req.curp);
-            pstmt.setString(2, hashPassword(req.password)); // Hasheamos para comparar
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                String token = "mock-token-" + System.currentTimeMillis(); 
-                String json = String.format("{\"success\": true, \"token\": \"%s\", \"name\": \"%s\", \"role\": \"%s\"}", 
-                              token, rs.getString("name"),  rs.getString("role"));                
-                sendResponse(json, exchange, 200);
-            } else {
-                sendResponse("{\"success\": false, \"message\": \"Credenciales inválidas\"}", exchange, 401);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            sendResponse("{\"error\": \"Error BD\"}", exchange, 500);
-        }
+        String result = authService.login(req.curp, req.password);
+        int status = result.contains("success\": true") ? 200 : 401;
+        sendResponse(result, exchange, status);
     }
 
     // 3. BALANCE (SALDO)
     private void handleBalanceRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
-        String curp = exchange.getRequestHeaders().getFirst("X-User-Curp");
-
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
+        String curp = jwt.getClaim("curp").asString();
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             String sql = "SELECT a.balance FROM accounts a JOIN users u ON a.user_id = u.id WHERE u.curp = ?";
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, curp);
             ResultSet rs = pstmt.executeQuery();
-
             if (rs.next()) {
                 sendResponse("{\"balance\": " + rs.getDouble("balance") + "}", exchange, 200);
             } else {
@@ -210,41 +159,34 @@ public class WebServer {
     private void handleOperationRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
         if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
+        String curp = jwt.getClaim("curp").asString();
         InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
         OperationRequest req = gson.fromJson(isr, OperationRequest.class);
-
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             conn.setAutoCommit(false);
-
             String sqlGet = "SELECT a.id, a.balance FROM accounts a JOIN users u ON a.user_id = u.id WHERE u.curp = ?";
             PreparedStatement pStmtGet = conn.prepareStatement(sqlGet);
-            pStmtGet.setString(1, req.curp);
+            pStmtGet.setString(1, curp);
             ResultSet rs = pStmtGet.executeQuery();
-
             if (!rs.next()) { sendResponse("{\"error\": \"Cuenta no encontrada\"}", exchange, 404); return; }
-            
             long accId = rs.getLong("id");
             double currentBalance = rs.getDouble("balance");
-
             if (req.type.equals("WITHDRAW") && currentBalance < req.amount) {
                 sendResponse("{\"error\": \"Fondos insuficientes\"}", exchange, 400); return;
             }
-
             double newBalance = req.type.equals("DEPOSIT") ? (currentBalance + req.amount) : (currentBalance - req.amount);
-
             PreparedStatement pUpd = conn.prepareStatement("UPDATE accounts SET balance = ? WHERE id = ?");
             pUpd.setDouble(1, newBalance);
             pUpd.setLong(2, accId);
             pUpd.executeUpdate();
-
             PreparedStatement pTx = conn.prepareStatement("INSERT INTO transactions (account_id, amount, type, description, status, date) VALUES (?, ?, ?, ?, 'COMPLETED', NOW())");
             pTx.setLong(1, accId);
             pTx.setDouble(2, req.amount);
             pTx.setString(3, req.type);
             pTx.setString(4, req.type.equals("DEPOSIT") ? "Depósito Ventanilla" : "Retiro Cajero");
             pTx.executeUpdate();
-
             conn.commit();
             sendResponse("{\"success\": true, \"newBalance\": " + newBalance + "}", exchange, 200);
         } catch (Exception e) {
@@ -257,54 +199,45 @@ public class WebServer {
     private void handleTransferRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
         if (!exchange.getRequestMethod().equalsIgnoreCase("POST")) { exchange.close(); return; }
-
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
+        String sourceCurp = jwt.getClaim("curp").asString();
         InputStreamReader isr = new InputStreamReader(exchange.getRequestBody(), StandardCharsets.UTF_8);
         TransferRequest req = gson.fromJson(isr, TransferRequest.class);
-
-        if (req.targetCurp.equals(req.sourceCurp)) {
+        if (req.targetCurp.equals(sourceCurp)) {
             sendResponse("{\"error\": \"No puedes transferirte a ti mismo\"}", exchange, 400); return;
         }
-
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             conn.setAutoCommit(false);
-
             // Verificar Origen
             String sqlSource = "SELECT a.id, a.balance FROM accounts a JOIN users u ON a.user_id = u.id WHERE u.curp = ?";
             PreparedStatement psSource = conn.prepareStatement(sqlSource);
-            psSource.setString(1, req.sourceCurp);
+            psSource.setString(1, sourceCurp);
             ResultSet rsSource = psSource.executeQuery();
-
             if (!rsSource.next()) { conn.rollback(); sendResponse("{\"error\": \"Cuenta origen no existe\"}", exchange, 404); return; }
             long sourceAccId = rsSource.getLong("id");
             double sourceBalance = rsSource.getDouble("balance");
-
             if (sourceBalance < req.amount) { conn.rollback(); sendResponse("{\"error\": \"Fondos insuficientes\"}", exchange, 400); return; }
-
             // Verificar Destino
             String sqlTarget = "SELECT a.id, a.balance FROM accounts a JOIN users u ON a.user_id = u.id WHERE u.curp = ?";
             PreparedStatement psTarget = conn.prepareStatement(sqlTarget);
             psTarget.setString(1, req.targetCurp);
             ResultSet rsTarget = psTarget.executeQuery();
-
             if (!rsTarget.next()) { conn.rollback(); sendResponse("{\"error\": \"Destino no existe\"}", exchange, 404); return; }
             long targetAccId = rsTarget.getLong("id");
             double targetBalance = rsTarget.getDouble("balance");
-
             // Actualizar Saldos
             PreparedStatement updateSource = conn.prepareStatement("UPDATE accounts SET balance = ? WHERE id = ?");
             updateSource.setDouble(1, sourceBalance - req.amount);
             updateSource.setLong(2, sourceAccId);
             updateSource.executeUpdate();
-
             PreparedStatement updateTarget = conn.prepareStatement("UPDATE accounts SET balance = ? WHERE id = ?");
             updateTarget.setDouble(1, targetBalance + req.amount);
             updateTarget.setLong(2, targetAccId);
             updateTarget.executeUpdate();
-
             // Registrar Logs
             String motivo = (req.description != null && !req.description.isEmpty()) ? req.description : "Transferencia";
             String sqlHist = "INSERT INTO transactions (account_id, amount, type, description, status, date) VALUES (?, ?, ?, ?, 'COMPLETED', NOW())";
-            
             // Salida
             PreparedStatement psHist1 = conn.prepareStatement(sqlHist);
             psHist1.setLong(1, sourceAccId);
@@ -312,15 +245,13 @@ public class WebServer {
             psHist1.setString(3, "TRANSFER_SENT");
             psHist1.setString(4, motivo + " (Para: " + req.targetCurp + ")");
             psHist1.executeUpdate();
-
             // Entrada
             PreparedStatement psHist2 = conn.prepareStatement(sqlHist);
             psHist2.setLong(1, targetAccId);
             psHist2.setDouble(2, req.amount);
             psHist2.setString(3, "TRANSFER_RECEIVED");
-            psHist2.setString(4, motivo + " (De: " + req.sourceCurp + ")");
+            psHist2.setString(4, motivo + " (De: " + sourceCurp + ")");
             psHist2.executeUpdate();
-
             conn.commit();
             sendResponse("{\"success\": true, \"message\": \"Transferencia exitosa\"}", exchange, 200);
         } catch (Exception e) {
@@ -332,14 +263,14 @@ public class WebServer {
     // 6. HISTORIAL (TRANSACTIONS)
     private void handleTransactionsRequest(HttpExchange exchange) throws IOException {
         if (handleCORS(exchange)) return;
-        String curp = exchange.getRequestHeaders().getFirst("X-User-Curp");
-
+        DecodedJWT jwt = validateToken(exchange);
+        if (jwt == null) return;
+        String curp = jwt.getClaim("curp").asString();
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             String sql = "SELECT t.* FROM transactions t JOIN accounts a ON t.account_id = a.id JOIN users u ON a.user_id = u.id WHERE u.curp = ? ORDER BY t.date DESC LIMIT 10";
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, curp);
             ResultSet rs = pstmt.executeQuery();
-
             StringBuilder json = new StringBuilder("[");
             boolean first = true;
             while(rs.next()) {

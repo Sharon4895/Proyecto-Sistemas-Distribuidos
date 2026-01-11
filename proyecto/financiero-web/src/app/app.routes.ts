@@ -9,6 +9,8 @@ import { UsersListComponent } from './features/admin/users-list/users-list.compo
 
 // IMPORTAMOS LOS GUARDIAS CREADOS
 import { authGuard, publicGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
+import { userGuard } from './core/guards/user.guard';
 
 export const routes: Routes = [
   // Ruta por defecto
@@ -30,8 +32,7 @@ export const routes: Routes = [
   // --- ÁREA DE CLIENTE (Solo Rol USER) ---
   { 
     path: 'client',
-    canActivate: [authGuard],      // <--- Protección activada
-    data: { role: 'USER' },        // <--- Requisito: Ser USER
+    canActivate: [userGuard],      // <--- Solo usuarios
     children: [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'transactions', component: TransactionsComponent },
@@ -43,8 +44,7 @@ export const routes: Routes = [
   // --- ÁREA DE ADMINISTRADOR (Solo Rol ADMIN) ---
   { 
     path: 'admin',
-    canActivate: [authGuard],      // <--- Protección activada
-    data: { role: 'ADMIN' },       // <--- Requisito: Ser ADMIN
+    canActivate: [adminGuard],     // <--- Solo administradores
     children: [
       { path: 'dashboard', component: AdminDashboardComponent },
       { path: 'users', component: UsersListComponent },

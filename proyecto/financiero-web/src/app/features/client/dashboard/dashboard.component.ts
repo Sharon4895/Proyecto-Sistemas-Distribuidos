@@ -36,16 +36,20 @@ import { ToastModule } from 'primeng/toast';      // <--- 1. IMPORTANTE
 export class DashboardComponent implements OnInit, OnDestroy {
   private updateSubscription: Subscription | null = null;
 
-  currentUser: User | null = null;
+  userName: string | null = null;
   transactions: Transaction[] = [];
   balance: number = 0;
   isLoading: boolean = true;
+  isTxLoading: boolean = true;
+  txError: string | null = null;
+  balanceError: string | null = null;
 
   constructor(private authService: AuthService, private accountService: AccountService, private messageService: MessageService) {}
 
   ngOnInit() {
     this.loadBalance();
-    this.currentUser = this.authService.getCurrentUser();
+    const user = this.authService.getUserFromToken();
+    this.userName = user?.name || null;
     this.loadTransactions();
 
     this.refreshData();
@@ -67,27 +71,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   loadTransactions() {
+    this.isTxLoading = true;
+    this.txError = null;
     this.accountService.getTransactions().subscribe({
       next: (data) => {
-        // Tomamos solo las últimas 5 para el dashboard
         this.transactions = data.slice(0, 5);
+        this.isTxLoading = false;
       },
-      error: (err) => console.error('Error cargando historial', err)
+      error: (err) => {
+        this.txError = 'No se pudo cargar el historial de movimientos.';
+        this.isTxLoading = false;
+        console.error('Error cargando historial', err);
+      }
     });
   }
 
   loadBalance() {
     this.isLoading = true;
+    this.balanceError = null;
     this.accountService.getBalance().subscribe({
       next: (data: any) => {
-        // ANTES: this.balance = data;
-        // AHORA: Extraemos la propiedad .balance del JSON
         this.balance = data.balance; 
         this.isLoading = false;
       },
       error: () => {
         this.isLoading = false;
-        // ... manejo de error
+        this.balanceError = 'No se pudo cargar el saldo.';
       }
     });
   }
