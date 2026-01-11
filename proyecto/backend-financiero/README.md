@@ -3,71 +3,74 @@
 Ubicación: `proyecto/backend-financiero`
 
 ## Resumen
-
-Servidor HTTP Java (clase `WebServer`) que expone endpoints REST básicos y usa MySQL como almacenamiento.
+Servidor HTTP Java (clase `WebServer`) que expone endpoints REST y usa MySQL como almacenamiento.
 
 ## Requisitos
 
-- Java JDK 11+ (o 8+ en muchos entornos).
-- MySQL (o MariaDB) en ejecución.
-- Las dependencias Java están en `lib/` (`mysql-connector-j`, `gson`) y las clases compiladas en `bin/`.
+- Java JDK 11+ (o 8+ en muchos entornos)
+- MySQL (o MariaDB) en ejecución (puerto 3306 por defecto)
+- Las dependencias Java (`mysql-connector-j`, `gson`) deben estar en la carpeta `lib/`
+
+## Instalación de dependencias
+
+1. Descarga los archivos JAR necesarios y colócalos en `lib/`:
+	 - [mysql-connector-j](https://dev.mysql.com/downloads/connector/j/)
+	 - [gson](https://search.maven.org/artifact/com.google.code.gson/gson)
+
+2. Instala MySQL:
+	 - **Linux:**
+		 ```bash
+		 sudo apt update
+		 sudo apt install mysql-server
+		 sudo systemctl start mysql
+		 ```
+	 - **Windows:**
+		 Descarga el instalador desde https://dev.mysql.com/downloads/installer/ y sigue el asistente.
+
+3. (Opcional) Cambia las credenciales de la base de datos en `src/WebServer.java` si no usas `root`/`root`.
 
 ## Preparar la base de datos
 
-1) Crear la base de datos y tablas (Windows / Linux):
+1. Crea la base y tablas:
+	 ```bash
+	 cd proyecto/backend-financiero
+	 mysql -u root -p < db/schema.sql
+	 ```
 
-```bash
-# abre cliente MySQL y ejecuta:
-mysql -u root -p
-CREATE DATABASE financiero_db;
-EXIT;
-```
+2. (Opcional) Para crear un usuario admin:
+	 - Genera el hash SHA-256 de la contraseña:
+		 ```bash
+		 echo -n "admin123" | sha256sum
+		 # Copia solo el hash (sin espacios)
+		 ```
+	 - Inserta el usuario admin en MySQL:
+		 ```sql
+		 INSERT INTO users (curp, password, name, role) VALUES ('ADMINCURP000000000', '<hash>', 'Administrador', 'ADMIN');
+		 INSERT INTO accounts (user_id, balance) SELECT id, 0.00 FROM users WHERE curp = 'ADMINCURP000000000';
+		 ```
 
-2) Importar el esquema (desde la raíz del proyecto):
+## Compilación y ejecución
 
-```bash
-cd proyecto/backend-financiero
-mysql -u root -p financiero_db < db/schema.sql
-```
-
-Si tu usuario/contraseña son diferentes, sustitúyelos en los comandos o edita `src/WebServer.java`.
-
-## Instalación y ejecución
-
-Windows (PowerShell):
-
+### Windows (PowerShell):
 ```powershell
 cd proyecto\backend-financiero
-# compilar (si hiciste cambios)
 javac -d bin -cp "lib/*" src\WebServer.java
-
-# ejecutar (separa classpath con ';')
 java -cp "bin;lib/*" WebServer 8080
 ```
 
-Linux / macOS (bash):
-
+### Linux / macOS (bash):
 ```bash
 cd proyecto/backend-financiero
-# compilar (si hiciste cambios)
 javac -d bin -cp "lib/*" src/WebServer.java
-
-# ejecutar (separa classpath con ':')
 java -cp "bin:lib/*" WebServer 8080
 ```
 
 El argumento `8080` es opcional; si no se pasa, se usa por defecto el puerto `8080`.
 
-## Configuración (consejos)
-
-- Credenciales y URL de la base de datos están hardcodeadas en `src/WebServer.java` en las constantes `DB_URL`, `DB_USER`, `DB_PASS`. Edita esos valores si tu MySQL usa otras credenciales.
-- Para mayor seguridad, puedo ayudarte a modificar `WebServer` para leer credenciales desde variables de entorno o un archivo de configuración.
-- Asegúrate de que el puerto de MySQL (3306) permita conexiones desde la máquina donde ejecutas el backend.
-
 ## Notas y solución de problemas
 
 - Si obtienes `CommunicationsException` o error de acceso, verifica el usuario/contraseña y que el servicio MySQL esté en ejecución.
 - Si el puerto 8080 ya está ocupado, lanza el servidor con otro puerto: `java -cp "bin;lib/*" WebServer 9090` (Windows) o `java -cp "bin:lib/*" WebServer 9090` (Linux).
-- Revisa `lib/` para asegurarte de que `mysql-connector-j` y `gson` estén presentes; si faltan, cópialos ahí o añádelos al classpath.
+- Revisa `lib/` para asegurarte de que `mysql-connector-j` y `gson` estén presentes.
+- Si tienes problemas de permisos en MySQL, asegúrate de que el usuario tenga privilegios sobre la base `financiero_db`.
 
-¿Quieres que modifique `src/WebServer.java` para leer las credenciales desde variables de entorno? Puedo hacerlo y añadir scripts de arranque para Windows/Linux.

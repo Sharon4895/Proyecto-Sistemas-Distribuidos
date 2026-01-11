@@ -1,85 +1,74 @@
-# FinancieroWeb
+# FinancieroWeb (Frontend Angular)
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.3.5.
+Ubicación: `proyecto/financiero-web`
 
-## Development server
+## Requisitos
+- Node.js v16+ y npm
+- Angular CLI 17
+- Acceso a un backend Java corriendo en `http://localhost:8080` (o ajusta la URL en los servicios)
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+## Instalación de Node.js y Angular CLI
 
-## Code scaffolding
+### Windows
+1. Descarga e instala Node.js desde https://nodejs.org (elige la versión LTS recomendada).
+2. Abre PowerShell y ejecuta:
+	```powershell
+	npm install -g @angular/cli@17
+	```
 
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+### Linux
+1. Instala Node.js:
+	```bash
+	sudo apt update
+	sudo apt install nodejs npm
+	# (Opcional) Instala n para gestionar versiones:
+	sudo npm install -g n
+	sudo n lts
+	```
+2. Instala Angular CLI:
+	```bash
+	npm install -g @angular/cli@17
+	```
 
-# FinancieroWeb
+## Instalación de dependencias y levantamiento
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 17.3.5.
-
-## Development server
-
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
-
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
-
-## Build
-
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
-
-## Running unit tests
-
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
-
-## Running end-to-end tests
-
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
-
-## Further help
-
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
-
----
-
-## Instalación (Windows / Linux)
-
-Requisitos: `Node.js` (v16+ recomendado) y `npm` o `yarn`.
-
-Windows (PowerShell):
-
+### Windows (PowerShell):
 ```powershell
 cd proyecto\financiero-web
 npm install
 npm start
-# abre http://localhost:4200 en tu navegador
+# Abre http://localhost:4200 en tu navegador
 ```
 
-Linux (bash):
-
+### Linux (bash):
 ```bash
 cd proyecto/financiero-web
 npm install
 npm start
-# abre http://localhost:4200 en tu navegador
+# Abre http://localhost:4200 en tu navegador
 ```
 
-## Configuración
-
-Por defecto el frontend apunta a `http://localhost:8080` para el backend. Si tu backend está en otra dirección modifica las variables `apiUrl` ubicadas en:
+## Configuración del backend
+Por defecto, el frontend se comunica con el backend en `http://localhost:8080` usando proxy (`proxy.conf.json`). Si tu backend está en otra dirección, edita:
 
 - `src/app/core/services/auth.service.ts`
 - `src/app/core/services/account.service.ts`
 - `src/app/core/services/admin.service.ts`
 
-Busca la línea que contiene `http://localhost:8080` y reemplázala por la URL de tu backend, por ejemplo:
+Busca la línea con `http://localhost:8080` y reemplázala por la URL de tu backend.
 
-```ts
-private apiUrl = 'http://mi-servidor:8080/api/auth';
-```
+## Variables de entorno
+Puedes mover la URL del backend a los archivos de entorno en `src/environments` para manejar múltiples entornos fácilmente.
 
-Para preparación de producción usa:
-
+## Producción
+Para construir el frontend para producción:
 ```bash
 npm run build -- --configuration production
 ```
+Los archivos estarán en `dist/financiero-web`.
 
-Si prefieres, puedo ayudarte a mover la URL del backend a los archivos de entornos (`src/environments`) para manejar múltiples entornos más fácilmente.
+## Notas
+- El login muestra un mensaje claro si las credenciales son incorrectas.
+- El sistema incluye navegación fácil con botones de regreso en las vistas de admin y cliente.
+
+
