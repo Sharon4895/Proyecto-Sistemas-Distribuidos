@@ -8,6 +8,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
 import { MessageService } from 'primeng/api';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-register',
@@ -19,7 +20,7 @@ import { MessageService } from 'primeng/api';
 export class RegisterComponent {
   registerForm: FormGroup;
 
-  constructor(private fb: FormBuilder, private router: Router,private messageService: MessageService) {
+  constructor(private fb: FormBuilder, private router: Router, private messageService: MessageService, private authService: AuthService) {
     this.registerForm = this.fb.group({
       nombre: ['', Validators.required],
       curp: ['', [Validators.required, Validators.minLength(18), Validators.maxLength(18)]],
@@ -30,26 +31,37 @@ export class RegisterComponent {
 
   onSubmit() {
     if (this.registerForm.valid) {
-      // 2. Usar el Toast en lugar de alert()
+      const { nombre, curp, password } = this.registerForm.value;
+      // Llamada al backend usando AuthService
+      this.authService.register(curp, password, nombre).subscribe({
+        next: (response) => {
+          this.messageService.add({
+            severity: 'success',
+            summary: '¡Bienvenido!',
+            detail: 'Cuenta creada correctamente. Por favor inicia sesión.',
+            life: 3000
+          });
+          setTimeout(() => {
+            this.router.navigate(['/login']);
+          }, 1000);
+        },
+        error: (err) => {
+          const errorMsg = err.error?.error || 'Ocurrió un error al registrar';
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: errorMsg,
+            life: 3000
+          });
+        }
+      });
+    } else {
       this.messageService.add({
-        severity: 'success',
-        summary: '¡Bienvenido!',
-        detail: 'Cuenta creada correctamente. Por favor inicia sesión.',
+        severity: 'warn',
+        summary: 'Atención',
+        detail: 'Por favor completa todos los campos correctamente.',
         life: 3000
       });
-      
-      // Esperamos un poquito antes de redirigir para que vea el mensaje
-      setTimeout(() => {
-          this.router.navigate(['/login']);
-      }, 1000);
-    } else {
-        // Mensaje de advertencia si el formulario está mal
-        this.messageService.add({
-            severity: 'warn',
-            summary: 'Atención',
-            detail: 'Por favor completa todos los campos correctamente.',
-            life: 3000
-        });
     }
   }
 }

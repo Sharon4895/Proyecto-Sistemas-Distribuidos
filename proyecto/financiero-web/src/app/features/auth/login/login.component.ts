@@ -51,43 +51,40 @@ export class LoginComponent {
 
   onSubmit() {
     if (this.loginForm.valid) {
-      
-      this.loading = true; // <--- CORREGIDO (antes decía isLoading)
-
-      // Extraer valores
+      this.loading = true;
       const { curp, password } = this.loginForm.value;
-      
-      // Llamar al servicio (que ahora sí existe gracias al constructor)
       this.authService.login(curp, password).subscribe({
         next: () => {
-          this.loading = false; // <--- CORREGIDO
-          
+          this.loading = false;
           this.messageService.add({
-            severity: 'success', 
-            summary: 'Bienvenido', 
+            severity: 'success',
+            summary: 'Bienvenido',
             detail: 'Iniciando sesión...'
           });
-
-          // Redirigir después de un momento
           setTimeout(() => {
             this.router.navigate(['/client/dashboard']);
           }, 1000);
         },
-        error: (err: any) => { // <--- CORREGIDO (agregamos el tipo :any)
-          this.loading = false; // <--- CORREGIDO
+        error: (err: any) => {
+          this.loading = false;
           console.error('Error login:', err);
-          
+          let msg = 'Ocurrió un error';
+          if (err.status === 401) {
+            msg = 'Datos incorrectos. Verifica tu CURP y contraseña.';
+          } else if (err.error?.message) {
+            msg = err.error.message;
+          }
           this.messageService.add({
-            severity: 'error', 
-            summary: 'Error', 
-            detail: 'Credenciales incorrectas o usuario no encontrado'
+            severity: 'error',
+            summary: 'Error',
+            detail: msg
           });
         }
       });
     } else {
       this.messageService.add({
-        severity: 'warn', 
-        summary: 'Atención', 
+        severity: 'warn',
+        summary: 'Atención',
         detail: 'Por favor completa todos los campos correctamente'
       });
     }

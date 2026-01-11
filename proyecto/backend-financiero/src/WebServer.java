@@ -14,10 +14,9 @@ import java.security.MessageDigest;
 
 public class WebServer {
 
-    // --- CONFIGURACIÓN DE BASE DE DATOS ---
     private static final String DB_URL = "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true";
     private static final String DB_USER = "root";
-    private static final String DB_PASS = "root"; // <--- ¡VERIFICA TU CONTRASEÑA!
+    private static final String DB_PASS = "root";
 
     // --- ENDPOINTS ---
     private static final String LOGIN_ENDPOINT = "/api/auth/login"; 
@@ -58,6 +57,8 @@ public class WebServer {
         server.createContext(TRANSACTIONS_ENDPOINT, this::handleTransactionsRequest);
         server.createContext(OPERATE_ENDPOINT, this::handleOperationRequest);
         server.createContext(TRANSFER_ENDPOINT, this::handleTransferRequest);
+        // Endpoint temporal para depuración
+        server.createContext("/api/debug/users", this::handleDebugUsersRequest);
         
         // Rutas de Admin y Registro
         server.createContext("/api/admin/stats", this::handleAdminStatsRequest);
@@ -68,6 +69,26 @@ public class WebServer {
 
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
+    }
+    // Endpoint temporal para depuración: lista los últimos 5 usuarios
+    private void handleDebugUsersRequest(HttpExchange exchange) throws IOException {
+        if (handleCORS(exchange)) return;
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
+            PreparedStatement ps = conn.prepareStatement("SELECT id, name, curp FROM users ORDER BY id DESC LIMIT 5");
+            ResultSet rs = ps.executeQuery();
+            StringBuilder json = new StringBuilder("[");
+            boolean first = true;
+            while (rs.next()) {
+                if (!first) json.append(",");
+                json.append(String.format("{\"id\":%d,\"name\":\"%s\",\"curp\":\"%s\"}", rs.getLong("id"), rs.getString("name"), rs.getString("curp")));
+                first = false;
+            }
+            json.append("]");
+            sendResponse(json.toString(), exchange, 200);
+        } catch (Exception e) {
+            e.printStackTrace();
+            sendResponse("[]", exchange, 500);
+        }
     }
 
     // ================= HANDLERS (MÉTODOS) =================
@@ -97,16 +118,16 @@ public class WebServer {
             }
 
             // Generar Username y Hash
-            String generatedUsername = generateUniqueUsername(req.curp);
+            //String generatedUsername = generateUniqueUsername(req.curp);
             String hashedPassword = hashPassword(req.password);
 
             // Insertar Usuario
-            String sqlUser = "INSERT INTO users (name, username, curp, password, role) VALUES (?, ?, ?, ?, 'USER')";
+            String sqlUser = "INSERT INTO users (name, curp, password, role) VALUES (?, ?, ?, 'USER')";
             PreparedStatement psUser = conn.prepareStatement(sqlUser, Statement.RETURN_GENERATED_KEYS);
             psUser.setString(1, req.name);
-            psUser.setString(2, generatedUsername);
-            psUser.setString(3, req.curp);
-            psUser.setString(4, hashedPassword); 
+            //psUser.setString(2, generatedUsername);
+            psUser.setString(2, req.curp);
+            psUser.setString(3, hashedPassword); 
             
             int affectedRows = psUser.executeUpdate();
             if (affectedRows == 0) { conn.rollback(); throw new SQLException("Fallo al crear usuario"); }
@@ -117,17 +138,15 @@ public class WebServer {
                 else { conn.rollback(); throw new SQLException("No se obtuvo ID"); }
             }
 
-            // Crear Cuenta (Bono $1000)
-            String accountNum = generateAccountNumber(); 
-            String sqlAcc = "INSERT INTO accounts (user_id, account_number, balance) VALUES (?, ?, ?)";
+            // Crear Cuenta (Saldo inicial 0)
+            String sqlAcc = "INSERT INTO accounts (user_id, balance) VALUES (?, ?)";
             PreparedStatement psAcc = conn.prepareStatement(sqlAcc);
             psAcc.setLong(1, newUserId);
-            psAcc.setString(2, accountNum);
-            psAcc.setDouble(3, 1000.00); 
+            psAcc.setDouble(2, 0.00); 
             psAcc.executeUpdate();
 
             conn.commit(); 
-            System.out.println("Nuevo usuario registrado: " + req.name + " (" + generatedUsername + ")");
+            //System.out.println("Nuevo usuario registrado: " + req.name + " (" + generatedUsername + ")");
             sendResponse("{\"success\": true, \"message\": \"Usuario registrado\"}", exchange, 201);
 
         } catch (Exception e) {
@@ -145,7 +164,7 @@ public class WebServer {
         LoginRequest req = gson.fromJson(isr, LoginRequest.class);
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-            String sql = "SELECT id, name, username, role FROM users WHERE curp = ? AND password = ?";
+            String sql = "SELECT id, name, role FROM users WHERE curp = ? AND password = ?";
             PreparedStatement pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, req.curp);
             pstmt.setString(2, hashPassword(req.password)); // Hasheamos para comparar
@@ -153,8 +172,8 @@ public class WebServer {
 
             if (rs.next()) {
                 String token = "mock-token-" + System.currentTimeMillis(); 
-                String json = String.format("{\"success\": true, \"token\": \"%s\", \"name\": \"%s\", \"username\": \"%s\", \"role\": \"%s\"}", 
-                              token, rs.getString("name"), rs.getString("username"), rs.getString("role"));                
+                String json = String.format("{\"success\": true, \"token\": \"%s\", \"name\": \"%s\", \"role\": \"%s\"}", 
+                              token, rs.getString("name"),  rs.getString("role"));                
                 sendResponse(json, exchange, 200);
             } else {
                 sendResponse("{\"success\": false, \"message\": \"Credenciales inválidas\"}", exchange, 401);
@@ -440,11 +459,6 @@ public class WebServer {
             }
             return hexString.toString();
         } catch (Exception e) { throw new RuntimeException(e); }
-    }
-
-    private String generateUniqueUsername(String curp) {
-        if (curp == null || curp.length() < 18) return "USER" + new Random().nextInt(9999);
-        return curp.substring(0, 4).toUpperCase() + curp.substring(16, 18).toUpperCase() + (new Random().nextInt(900) + 100);
     }
 
     // --- DTOs ---

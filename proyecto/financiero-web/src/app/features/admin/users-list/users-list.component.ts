@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms'; // <--- Necesario para el buscador
+import { RouterModule } from '@angular/router';
 
 // PrimeNG Imports
 import { TableModule } from 'primeng/table';
@@ -23,7 +24,8 @@ import { AdminService } from '../../../core/services/admin.service';
     InputTextModule,
     DialogModule,
     TooltipModule,
-    TagModule
+    TagModule,
+    RouterModule
   ],
   templateUrl: './users-list.component.html'
 })

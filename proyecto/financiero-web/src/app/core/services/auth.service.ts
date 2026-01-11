@@ -5,6 +5,10 @@ import { User } from '../models/financial.models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+    // Registro de usuario
+    register(curp: string, password: string, name: string) {
+      return this.http.post<any>(`${this.apiUrl}/register`, { curp, password, name });
+    }
   
   private apiUrl = 'http://localhost:8080/api/auth'; 
 
