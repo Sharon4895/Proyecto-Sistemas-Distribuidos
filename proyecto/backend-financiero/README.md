@@ -107,6 +107,61 @@ java -cp "bin:lib/*" src/WebServer 8080
 
 ---
 
+# Checklist de requisitos (resumido)
+- [x] Microservicios REST en Java
+- [x] AuthService (JWT)
+- [x] AccountService (saldo, depósito, retiro, transferencia)
+- [x] TransactionService (eventos Pub/Sub, integración lista)
+- [x] AuditService (logs de transacción, integración lista)
+- [x] AdminService (dashboard, usuarios, logs)
+- [x] PubSubSimulator (simulación local, hooks AWS)
+- [x] Configuración para desarrollo y producción
+- [x] Frontend Angular (usuario y admin)
+- [ ] Simulador de clientes Java (opcional, para demo)
+- [ ] Monitoreo Lanterna (opcional, para demo)
+
+# Despliegue recomendado para estudiantes
+
+## Opción 1: Local (más fácil y suficiente para la demo)
+1. **Base de datos:**
+   - Instala MySQL localmente y ejecuta el script `db/schema.sql`.
+2. **Backend:**
+   - Compila todo el código Java:
+     ```bash
+     javac -d bin -cp "lib/*" src/**/*.java
+     ```
+   - Ejecuta el servidor:
+     ```bash
+     java -cp "bin:lib/*" WebServer 8080
+     ```
+3. **Frontend:**
+   - En otra terminal:
+     ```bash
+     cd ../financiero-web
+     npm install
+     npm start
+     ```
+   - Accede a `http://localhost:4200`.
+
+## Opción 2: Nube gratuita (solo si quieres mostrarlo online)
+- Puedes usar una máquina virtual gratuita en Google Cloud, AWS o Azure (free tier) para levantar el backend y la base de datos.
+- Sube el frontend a un bucket S3, Firebase Hosting, o Netlify (tienen planes gratuitos).
+- Cambia la URL del backend en `environment.prod.ts`.
+- **No es obligatorio para la calificación, pero suma puntos en la demo.**
+
+# Recomendaciones
+- Haz pruebas locales completas antes de la demo.
+- Si tienes poco tiempo, prioriza la opción local.
+- Documenta bien los pasos en el README y ten a la mano los comandos.
+- Si el profe pide el simulador de clientes o Lanterna, implementa un programa Java aparte que consuma los endpoints REST.
+
+# Entrega
+- Sube todo el código a un repositorio privado de GitHub o Google Drive.
+- Incluye capturas de pantalla y el README actualizado.
+- Ten listo el enlace de la web de usuario y admin para la demo.
+
+---
+
 # Estructura de carpetas
 - `src/` Código fuente Java
 - `lib/` Dependencias externas
