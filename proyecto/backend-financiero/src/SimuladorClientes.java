@@ -13,7 +13,7 @@ public class SimuladorClientes {
     public static int numClientesGlobal = 0;
 
     // Constantes de configuración
-    private static final String BASE_URL = "http://localhost:8080/api";
+    private static final String BASE_URL = "http://3.143.243.197:8080/api";
     private static final Duration TIMEOUT = Duration.ofSeconds(10);
     
     // Cliente HTTP compartido (Thread-safe y optimizado en Java 11+)

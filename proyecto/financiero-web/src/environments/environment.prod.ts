@@ -1,4 +1,4 @@
 export const environment = {
   production: true,
-  apiUrl: 'https://ip-webserver/api' // Cambia esto por la URL real en producción
+  apiUrl: 'http://3.143.243.197:8080/api' // URL real del WebServer en AWS
 };
