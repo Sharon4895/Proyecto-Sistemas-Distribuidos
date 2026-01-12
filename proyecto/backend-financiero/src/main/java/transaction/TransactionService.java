@@ -1,18 +1,38 @@
-
 package transaction;
 
 import java.sql.*;
 import com.google.gson.Gson;
 import pubsub.PubSubSimulator;
 import audit.AuditService;
+import java.io.FileInputStream; // Nuevo import
+import java.io.IOException;     // Nuevo import
+import java.util.Properties;    // Nuevo import
 
-/**
- * Servicio de transacciones listo para despliegue distribuido.
- * DB_URL, DB_USER y DB_PASS se pueden parametrizar por variables de entorno.
- * Ejemplo de ejecución:
- *   DB_URL=jdbc:mysql://host/db DB_USER=usuario DB_PASS=clave java -cp ... transaction.TransactionService
- */
 public class TransactionService {
+    
+    // Variables estáticas modificables
+    private static String DB_URL;
+    private static String DB_USER;
+    private static String DB_PASS;
+    
+    // Bloque estático para cargar configuración
+    static {
+        Properties props = new Properties();
+        try (FileInputStream fis = new FileInputStream("config.properties")) {
+            props.load(fis);
+            System.out.println(">>> Configuración cargada desde config.properties");
+        } catch (IOException e) {
+            System.err.println(">>> No se encontró config.properties, usando valores por defecto/entorno.");
+        }
+
+        // Prioridad: 1. Variable de Entorno -> 2. Archivo config -> 3. Localhost (Default)
+        DB_URL = System.getenv().getOrDefault("DB_URL", props.getProperty("db.url", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true"));
+        DB_USER = System.getenv().getOrDefault("DB_USER", props.getProperty("db.user", "root"));
+        DB_PASS = System.getenv().getOrDefault("DB_PASS", props.getProperty("db.pass", "root"));
+        
+        System.out.println(">>> TransactionService conectando a DB en: " + DB_URL);
+    }
+
     public static void main(String[] args) {
         int port = 8083;
         try {
@@ -27,6 +47,7 @@ public class TransactionService {
                     }
                     String response = service.getUserTransactions(curp);
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*"); // CORS básico por si acaso
                     exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                     exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                 } else {
@@ -41,9 +62,7 @@ public class TransactionService {
             e.printStackTrace();
         }
     }
-    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true");
-    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
-    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "root");
+
     private final Gson gson = new Gson();
 
     // Simulador Pub/Sub y servicio de auditoría
@@ -56,6 +75,7 @@ public class TransactionService {
     }
 
     public String getUserTransactions(String curp) {
+        // Usamos las variables estáticas cargadas arriba
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
             String sql = "SELECT t.* FROM transactions t JOIN accounts a ON t.account_id = a.id JOIN users u ON a.user_id = u.id WHERE u.curp = ? ORDER BY t.date DESC LIMIT 10";
             PreparedStatement pstmt = conn.prepareStatement(sql);
@@ -65,7 +85,6 @@ public class TransactionService {
             boolean first = true;
             while(rs.next()) {
                 if(!first) json.append(",");
-                // TransactionResponse: id, date, type, amount, description, status
                 json.append(String.format("{\"id\":\"%s\",\"date\":\"%s\",\"type\":\"%s\",\"amount\":%.2f,\"description\":\"%s\",\"status\":\"%s\"}",
                     rs.getString("id"), rs.getString("date"), rs.getString("type"), rs.getDouble("amount"), rs.getString("description"), rs.getString("status")));
                 first = false;
@@ -74,20 +93,17 @@ public class TransactionService {
             return json.toString();
         } catch (Exception e) {
             e.printStackTrace();
+            System.err.println("Error conectando a DB: " + e.getMessage());
             return "[]";
         }
     }
 
-    // Publicar evento de transacción (simulación)
     public void publishTransactionEvent(String eventJson) {
         pubsub.publish("transactions", eventJson);
     }
 
-    // Procesar evento de transacción (simulación)
     private void processTransactionEvent(String eventJson) {
-        // Aquí se podría procesar la transacción y luego auditarla
         System.out.println("[TRANSACTION] Evento recibido: " + eventJson);
         auditService.logTransaction(eventJson);
-        // TODO: Actualizar balances, guardar en BD, etc.
     }
 }

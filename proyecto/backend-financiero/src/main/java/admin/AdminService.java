@@ -1,54 +1,77 @@
-
 package admin;
+
+import java.util.Map;
+import java.util.HashMap;
 
 import java.sql.*;
 import com.google.gson.Gson;
+import java.io.FileInputStream; // Nuevo
+import java.io.IOException;     // Nuevo
+import java.util.Properties;    // Nuevo
+import java.util.ArrayList;     // Nuevo
+import java.util.List;          // Nuevo
 
-/**
- * Servicio de administración listo para despliegue distribuido.
- * DB_URL, DB_USER y DB_PASS se pueden parametrizar por variables de entorno.
- * Ejemplo de ejecución:
- *   DB_URL=jdbc:mysql://host/db DB_USER=usuario DB_PASS=clave java -cp ... admin.AdminService
- */
 public class AdminService {
+    
+    // Variables estáticas modificables
+    private static String DB_URL;
+    private static String DB_USER;
+    private static String DB_PASS;
+
+    // Bloque estático para cargar configuración
+    static {
+        Properties props = new Properties();
+        try (FileInputStream fis = new FileInputStream("config.properties")) {
+            props.load(fis);
+            System.out.println(">>> Configuración cargada desde config.properties");
+        } catch (IOException e) {
+            System.err.println(">>> No se encontró config.properties, usando valores por defecto.");
+        }
+
+        // Prioridad: 1. Variable de Entorno -> 2. Archivo config -> 3. Localhost (Default)
+        DB_URL = System.getenv().getOrDefault("DB_URL", props.getProperty("db.url", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true"));
+        DB_USER = System.getenv().getOrDefault("DB_USER", props.getProperty("db.user", "root"));
+        DB_PASS = System.getenv().getOrDefault("DB_PASS", props.getProperty("db.pass", "root"));
+        
+        System.out.println(">>> AdminService conectando a DB en: " + DB_URL);
+    }
+
     public static void main(String[] args) {
         int port = 8085;
         try {
             com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress(port), 0);
             AdminService service = new AdminService();
+            
             server.createContext("/stats", exchange -> {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     String response = service.getStats();
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                     exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                } else {
-                    exchange.sendResponseHeaders(405, -1);
-                }
+                } else { exchange.sendResponseHeaders(405, -1); }
                 exchange.close();
             });
+
             server.createContext("/users", exchange -> {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     String response = service.getUsers();
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                     exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                } else {
-                    exchange.sendResponseHeaders(405, -1);
-                }
+                } else { exchange.sendResponseHeaders(405, -1); }
                 exchange.close();
             });
+
             server.createContext("/charts", exchange -> {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     String response = service.getCharts();
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                     exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                } else {
-                    exchange.sendResponseHeaders(405, -1);
-                }
+                } else { exchange.sendResponseHeaders(405, -1); }
                 exchange.close();
             });
+
             server.createContext("/userlogs", exchange -> {
                 if ("GET".equals(exchange.getRequestMethod())) {
                     String query = exchange.getRequestURI().getQuery();
@@ -60,11 +83,10 @@ public class AdminService {
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(200, response.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                     exchange.getResponseBody().write(response.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-                } else {
-                    exchange.sendResponseHeaders(405, -1);
-                }
+                } else { exchange.sendResponseHeaders(405, -1); }
                 exchange.close();
             });
+
             server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
             System.out.println("AdminService escuchando en el puerto " + port);
             server.start();
@@ -72,9 +94,7 @@ public class AdminService {
             e.printStackTrace();
         }
     }
-    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true");
-    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
-    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "root");
+
     private final Gson gson = new Gson();
 
     public String getStats() {
@@ -101,30 +121,50 @@ public class AdminService {
 
     public String getCharts() {
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
+            // Gráfica de Línea: Transacciones por hora hoy
             ResultSet rsLine = conn.prepareStatement("SELECT HOUR(date) as h, COUNT(*) as c FROM transactions WHERE DATE(date) = CURDATE() GROUP BY HOUR(date) ORDER BY h ASC").executeQuery();
-            java.util.List<Integer> ll = new java.util.ArrayList<>(), ld = new java.util.ArrayList<>(); while(rsLine.next()){ll.add(rsLine.getInt("h")); ld.add(rsLine.getInt("c"));}
+            List<Integer> ll = new ArrayList<>(); 
+            List<Integer> ld = new ArrayList<>(); 
+            while(rsLine.next()){ ll.add(rsLine.getInt("h")); ld.add(rsLine.getInt("c")); }
+            
+            // Si no hay datos, inicializar vacío para evitar error en JS
+            if (ll.isEmpty()) { ll.add(0); ld.add(0); }
+
+            // Gráfica de Barras: Dinero movido últimos 6 días
             ResultSet rsBar = conn.prepareStatement("SELECT DATE(date) as d, SUM(amount) as t FROM transactions WHERE date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) GROUP BY DATE(date) ORDER BY d ASC").executeQuery();
-            java.util.List<String> bl = new java.util.ArrayList<>(); java.util.List<Double> bd = new java.util.ArrayList<>(); while(rsBar.next()){bl.add(rsBar.getString("d")); bd.add(rsBar.getDouble("t"));}
-            String json = "{ \"line\": { \"labels\": " + gson.toJson(ll) + ", \"data\": " + gson.toJson(ld) + "}, \"bar\": { \"labels\": " + gson.toJson(bl) + ", \"data\": " + gson.toJson(bd) + "} }";
-            return json;
-        } catch (Exception e) { e.printStackTrace(); return "{}"; }
+            List<String> bl = new ArrayList<>(); 
+            List<Double> bd = new ArrayList<>(); 
+            while(rsBar.next()){ bl.add(rsBar.getString("d")); bd.add(rsBar.getDouble("t")); }
+
+            if (bl.isEmpty()) { bl.add("Hoy"); bd.add(0.0); }
+
+            // Construir JSON manualmente o con Gson
+            Map<String, Object> lineMap = new HashMap<>(); lineMap.put("labels", ll); lineMap.put("data", ld);
+            Map<String, Object> barMap = new HashMap<>(); barMap.put("labels", bl); barMap.put("data", bd);
+            
+            Map<String, Object> root = new HashMap<>();
+            root.put("line", lineMap);
+            root.put("bar", barMap);
+
+            return gson.toJson(root);
+        } catch (Exception e) { 
+            e.printStackTrace(); 
+            // Retornar estructura vacía segura para evitar crash del frontend
+            return "{ \"line\": {\"labels\":[], \"data\":[]}, \"bar\": {\"labels\":[], \"data\":[]} }"; 
+        }
     }
 
     public String getUserLogs(String userId) {
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS)) {
-            System.out.println("[ADMIN] getUserLogs llamado con userId=" + userId);
             PreparedStatement ps = conn.prepareStatement("SELECT t.date, t.type, t.description, t.amount FROM transactions t JOIN accounts a ON t.account_id = a.id WHERE a.user_id = ? ORDER BY t.date DESC");
             ps.setLong(1, Long.parseLong(userId));
             ResultSet rs = ps.executeQuery();
             StringBuilder json = new StringBuilder("["); boolean first = true;
-            int count = 0;
             while (rs.next()) {
                 if (!first) json.append(",");
                 json.append(String.format("{\"date\":\"%s\", \"type\":\"%s\", \"description\":\"%s\", \"amount\":%.2f}", rs.getTimestamp("date"), rs.getString("type"), rs.getString("description"), rs.getDouble("amount")));
                 first = false;
-                count++;
             }
-            System.out.println("[ADMIN] Movimientos encontrados para userId=" + userId + ": " + count);
             json.append("]");
             return json.toString();
         } catch (Exception e) {

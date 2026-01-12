@@ -51,7 +51,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>SimuladorClientes</mainClass>
+                            <mainClass>admin.AdminService</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
@@ -73,6 +73,6 @@
 
     <properties>
         <!-- Cambia este valor para cada microservicio/utilidad antes de empaquetar -->
-        <mainClass>SimuladorClientes</mainClass>
+        <mainClass>admin.AdminService</mainClass>
     </properties>
 </project>

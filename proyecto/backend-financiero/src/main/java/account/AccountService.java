@@ -1,16 +1,36 @@
-
 package account;
 
 import com.google.gson.Gson;
 import java.sql.*;
+import java.io.FileInputStream; // Nuevo import
+import java.io.IOException;     // Nuevo import
+import java.util.Properties;    // Nuevo import
 
-/**
- * Servicio de cuentas listo para despliegue distribuido.
- * DB_URL, DB_USER y DB_PASS se pueden parametrizar por variables de entorno.
- * Ejemplo de ejecución:
- *   DB_URL=jdbc:mysql://host/db DB_USER=usuario DB_PASS=clave java -cp ... account.AccountService
- */
 public class AccountService {
+    
+    // Variables estáticas modificables (ya no son final)
+    private static String DB_URL;
+    private static String DB_USER;
+    private static String DB_PASS;
+    
+    // Bloque estático para cargar configuración al inicio
+    static {
+        Properties props = new Properties();
+        try (FileInputStream fis = new FileInputStream("config.properties")) {
+            props.load(fis);
+            System.out.println(">>> Configuración cargada desde config.properties");
+        } catch (IOException e) {
+            System.err.println(">>> No se encontró config.properties, usando valores por defecto/entorno.");
+        }
+
+        // Prioridad: 1. Variable de Entorno -> 2. Archivo config -> 3. Localhost (Default)
+        DB_URL = System.getenv().getOrDefault("DB_URL", props.getProperty("db.url", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true"));
+        DB_USER = System.getenv().getOrDefault("DB_USER", props.getProperty("db.user", "root"));
+        DB_PASS = System.getenv().getOrDefault("DB_PASS", props.getProperty("db.pass", "root"));
+        
+        System.out.println(">>> AccountService conectando a DB en: " + DB_URL);
+    }
+
     public static void main(String[] args) {
         int port = 8082;
         try {
@@ -74,9 +94,7 @@ public class AccountService {
             e.printStackTrace();
         }
     }
-    private static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:mysql://localhost:3306/financiero_db?useSSL=false&allowPublicKeyRetrieval=true");
-    private static final String DB_USER = System.getenv().getOrDefault("DB_USER", "root");
-    private static final String DB_PASS = System.getenv().getOrDefault("DB_PASS", "root");
+
     private final Gson gson = new Gson();
 
     public String getBalance(String curp) {
@@ -92,6 +110,7 @@ public class AccountService {
             }
         } catch (Exception e) {
             e.printStackTrace();
+            System.err.println("Error DB en getBalance: " + e.getMessage());
             return "{\"error\": \"Error BD\"}";
         }
     }
